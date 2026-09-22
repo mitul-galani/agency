@@ -18,18 +18,14 @@ You need:
 git clone https://github.com/mitul-galani/agency.git
 cd agency
 npm ci
-npm run dev
+npm run agency
 ```
 
-Open [http://localhost:3100](http://localhost:3100), describe what you want Agency to help with, and save it.
+That is the whole setup. `npm run agency` starts the app, waits for it to answer, and then launches Claude Opus through your existing Claude Code login. One terminal, and Ctrl-C stops both. No Anthropic API key is required.
 
-Keep the app running. In a second terminal:
+Open [http://localhost:3100](http://localhost:3100), describe what you want Agency to help with, and save it. Claude reads the Agency instructions, tests its available connections, and prepares the first cards from what you wrote.
 
-```sh
-npm run agency:claude
-```
-
-That command launches Claude Opus through your existing Claude Code login. Claude reads the Agency instructions, tests its available connections, and prepares the first cards. No Anthropic API key is required.
+If you already have the app running in another terminal, `npm run agency` uses it and leaves it alone when you quit. To run the two halves yourself — useful when the app will not start and you want to see why — `npm run dev` is the app and `npm run agency:claude` is the coordinator.
 
 ## How connected apps work
 
