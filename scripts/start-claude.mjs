@@ -39,7 +39,6 @@ const prompt = [
 const result = spawnSync("claude", [
   "--model", model,
   "--effort", "high",
-  "--permission-mode", "auto",
   "--name", "Agency",
   prompt,
 ], { cwd: root, stdio: "inherit" });
