@@ -21,7 +21,7 @@ npm ci
 npm run dev
 ```
 
-Open [http://localhost:3100](http://localhost:3100), describe what you want Agency to help with, and save it.
+Open [http://localhost:3100](http://localhost:3100), add your first piece of context, and save it. You can add separate notes for priorities, responsibilities, preferences, and anything discovery should ignore.
 
 Keep the app running. In a second terminal:
 
@@ -55,6 +55,8 @@ An installed connector or a browser login alone is not proof of access. See [Con
 - **Done:** review completed and dismissed cards later
 
 You can also add a task directly in the app when Claude did not discover it.
+
+Context is standing guidance for Agency. Add, edit, or remove individual notes in Settings instead of maintaining one long profile. Every discovery pass and new task receives the combined context.
 
 Cards stay local. They include the source, useful evidence, prepared work, and the exact decision still needed from you.
 

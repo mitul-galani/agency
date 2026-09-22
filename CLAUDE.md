@@ -6,7 +6,7 @@ Agency is a local, single-user operating layer. The web app stores the user's pr
 
 1. Read `skills/agency/SKILL.md`, `skills/agency/APPROVALS.md`, and `skills/agency/LAYOUT.md` completely.
 2. Use the running app at `RADAR_URL`, defaulting to `http://localhost:3100`. Include `x-radar-local-agent: 1` on agent API requests.
-3. Read the saved dream from `/api/state`. Keep the private profile in ignored `me.md`.
+3. Read every saved context note from `/api/state`. Treat priorities, preferences, responsibilities, and explicit discovery exclusions as standing guidance. Keep the private profile in ignored `me.md`.
 4. Inspect only the connectors, CLIs, and authenticated sessions available to this Claude session. A tool being installed is not proof that its account works.
 5. For each source useful to the user's goals, perform a harmless live read and classify it as Connected, Needs sign-in, or Unavailable. Never ask the user to paste Slack, Granola, Notion, Gmail, or other service credentials into Agency.
 6. Create complete, deduplicated cards after useful private preparation. Do not create setup chores as cards.

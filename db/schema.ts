@@ -7,6 +7,20 @@ export const contexts = sqliteTable("contexts", {
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 
+export const contextItems = sqliteTable("context_items", {
+  id: text("id").primaryKey(),
+  text: text("text").notNull(),
+  position: integer("position").notNull().default(0),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const appMeta = sqliteTable("app_meta", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
+
 export const ideas = sqliteTable("ideas", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   project: text("project").notNull().default(""),

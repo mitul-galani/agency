@@ -30,7 +30,7 @@ try {
 const prompt = [
   "Read CLAUDE.md and skills/agency/SKILL.md completely.",
   `Set up and start this user's local Agency at ${agencyUrl}.`,
-  "Use the dream already saved in the app. Inspect the tools, connectors, CLIs, and authenticated sessions available to this exact Claude session.",
+  "Use all context notes already saved in the app, including anything discovery should ignore. Inspect the tools, connectors, CLIs, and authenticated sessions available to this exact Claude session.",
   "For each source that is useful to the user's goals, perform a harmless live read and report it as Connected, Needs sign-in, or Unavailable. Do not ask the user to paste service credentials into Agency.",
   "Create the first useful cards only after checking for duplicates. Keep personal profiles, source material, credentials, and generated work out of git.",
   "Do not create a recurring schedule until the user explicitly chooses a cadence.",

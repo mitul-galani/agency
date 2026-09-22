@@ -9,6 +9,7 @@ import { clusterForCard, type Topic } from "../lib/card-cluster";
 import { compareByImpact, impactPoints } from "../lib/rise";
 import { MAX_TASK_LENGTH, submitNewTask } from "../lib/task-submission";
 import type { DiscoveryStatus } from "../lib/discovery-status";
+import type { ContextItem } from "../lib/context-items";
 
 type Idea = {
   id: number;
@@ -51,6 +52,7 @@ type Idea = {
 
 type RadarState = {
   context: { text: string; createdAt: string } | null;
+  contextItems: ContextItem[];
   topics: Topic[];
   ideas: Idea[];
   laneCounts: Record<Idea["status"], number>;
@@ -102,6 +104,7 @@ type AttentionTracker = {
 
 const emptyState: RadarState = {
   context: null,
+  contextItems: [],
   topics: [],
   ideas: [],
   laneCounts: { new: 0, working: 0, parked: 0, done: 0 },
@@ -910,8 +913,8 @@ export function Agency() {
   async function submitTell() {
     if (taskSubmittingRef.current) return;
     const task = taskDraft.trim();
-    const dream = contextDraft.trim();
-    if (composer === "task" ? !task : !dream) return;
+    const contextText = contextDraft.trim();
+    if (composer === "task" ? !task : !contextText) return;
     taskSubmittingRef.current = true;
     setTaskSubmitting(true);
     setComposerError("");
@@ -931,7 +934,7 @@ export function Agency() {
         // Refresh failure must not make a saved task look unsent.
         void load("new", { preferred: next }).catch(() => undefined);
       } else {
-        const response = await fetch("/api/context", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: dream }) });
+        const response = await fetch("/api/context", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text: contextText }) });
         if (!response.ok) {
           const result = await response.json().catch(() => null) as { error?: string } | null;
           throw new Error(result?.error || "Your context was not saved. Try again.");
@@ -967,7 +970,6 @@ export function Agency() {
     recordCardInteraction(active, "new_task", "New Task");
     setMessage("");
     setComposerError("");
-    setContextDraft(data.context?.text ?? "");
     setComposer("task");
   }
 
@@ -993,11 +995,11 @@ export function Agency() {
 
           <div className="radar-onboarding-grid">
             <section className="radar-onboarding-form">
-              <label htmlFor="agency-dream">What should Agency help you stay on top of?</label>
-              <p>Describe your role, current priorities, recurring responsibilities, and anything it should ignore.</p>
-              <textarea id="agency-dream" value={contextDraft} onChange={(event) => setContextDraft(event.target.value)} placeholder="I want one place to see the decisions, follow-ups, and work that need my attention…" />
+              <label htmlFor="agency-context">Add your first piece of context</label>
+              <p>Tell Agency one thing about your role, priorities, responsibilities, preferences, or what it should ignore. You can add more later.</p>
+              <textarea id="agency-context" value={contextDraft} onChange={(event) => setContextDraft(event.target.value)} placeholder="For example: Ignore routine updates unless someone needs my decision." />
               {composerError && <p className="radar-task-error" role="alert">{composerError}</p>}
-              <button className="is-primary" disabled={taskSubmitting || !contextDraft.trim()} onClick={() => void submitTell()}>{taskSubmitting ? "Saving…" : "Save and continue"}</button>
+              <button className="is-primary" disabled={taskSubmitting || !contextDraft.trim()} onClick={() => void submitTell()}>{taskSubmitting ? "Saving…" : "Add context and continue"}</button>
             </section>
 
             <aside className="radar-onboarding-connections">
@@ -1103,11 +1105,11 @@ export function Agency() {
         <section className="radar-task" aria-busy={taskSubmitting}>
           <label className="is-once">
             <span>New task</span>
-            <textarea value={taskDraft} disabled={taskSubmitting} maxLength={MAX_TASK_LENGTH} onChange={(event) => setTaskDraft(event.target.value)} placeholder="One task, in your words. Agency carries your dream with it." />
+            <textarea value={taskDraft} disabled={taskSubmitting} maxLength={MAX_TASK_LENGTH} onChange={(event) => setTaskDraft(event.target.value)} placeholder="One task, in your words. Agency includes your saved context." />
           </label>
           {composerError && <p className="radar-task-error" role="alert">{composerError}</p>}
           <footer>
-            <Link className="radar-settings-link" href="/settings">Edit my dream and topics in Settings</Link>
+            <Link className="radar-settings-link" href="/settings">Edit context and topics in Settings</Link>
             <button className="is-dark" disabled={taskSubmitting || !taskDraft.trim()} onClick={() => void submitTell()}>{taskSubmitting ? "Sending…" : "Send"}</button>
           </footer>
         </section>

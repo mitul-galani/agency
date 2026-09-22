@@ -5,6 +5,7 @@ import { estimateDecisionTime, type DecisionCardInput } from "../../../lib/decis
 import { DISCOVERY_STATUS_SELECT, presentDiscoveryStatus, type DiscoveryStatusRow } from "../../../lib/discovery-status";
 import { jobLeaseWindow } from "../../../lib/job-lifecycle";
 import { WAKE_PARKED_SQL } from "../../../lib/parked-card";
+import { combineContextItems, type ContextItem } from "../../../lib/context-items";
 
 type IdeaRow = DecisionCardInput & Record<string, unknown>;
 type DecisionHistoryRow = DecisionCardInput & {
@@ -69,7 +70,10 @@ export async function GET(request: Request) {
   const light = url.searchParams.get("light") === "1";
   const requestedOnlyId = Number(url.searchParams.get("only"));
   const onlyId = Number.isInteger(requestedOnlyId) && requestedOnlyId > 0 ? requestedOnlyId : null;
-  const context = await db.prepare("SELECT text, created_at AS createdAt FROM contexts ORDER BY id DESC LIMIT 1").first();
+  const contextItemRows = await db.prepare("SELECT id, text, position, created_at AS createdAt, updated_at AS updatedAt FROM context_items ORDER BY position, created_at, id").all<ContextItem>();
+  const contextItems = contextItemRows.results;
+  const contextText = combineContextItems(contextItems);
+  const context = contextText ? { text: contextText, createdAt: contextItems.reduce((latest, item) => item.updatedAt > latest ? item.updatedAt : latest, "") } : null;
   const discoveryRow = await db.prepare(DISCOVERY_STATUS_SELECT).first<DiscoveryStatusRow>();
   const topicRows = await db.prepare("SELECT id, label, hint FROM topics ORDER BY position, created_at").all<{ id: string; label: string; hint: string }>();
   const ideas = await db.prepare(`
@@ -209,6 +213,7 @@ export async function GET(request: Request) {
   const laneCounts = Object.fromEntries(laneRows.results.map((row) => [row.status, row.total]));
   return Response.json({
     context,
+    contextItems,
     topics: topicRows.results.map(parseTopicRow),
     ideas: enrichedIdeas,
     laneCounts: {

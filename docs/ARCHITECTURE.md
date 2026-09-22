@@ -2,7 +2,7 @@
 
 Agency has two parts:
 
-1. **The local app** stores the dream, cards, decisions, job instructions, and results in a local SQLite/D1 database.
+1. **The local app** stores context notes, cards, decisions, job instructions, and results in a local SQLite/D1 database.
 2. **The local Claude session** reads authorized sources, prepares cards, watches the job queue, and performs approved work.
 
 The browser app does not hold third-party credentials and does not call an LLM API. The launcher uses the user's existing Claude Code login and subscription.

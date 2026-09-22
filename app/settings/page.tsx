@@ -3,40 +3,73 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Topic } from "../../lib/card-cluster";
+import type { ContextItem } from "../../lib/context-items";
 
-type Draft = { id?: string; label: string; hint: string };
+type TopicDraft = { id?: string; label: string; hint: string };
+type ContextDraft = { id?: string; text: string };
 
 export default function SettingsPage() {
-  const [dream, setDream] = useState("");
-  const [savedDream, setSavedDream] = useState("");
+  const [contextItems, setContextItems] = useState<ContextItem[]>([]);
+  const [contextDraft, setContextDraft] = useState<ContextDraft | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
-  const [editing, setEditing] = useState<Draft | null>(null);
+  const [editingTopic, setEditingTopic] = useState<TopicDraft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
   function load() {
     return Promise.all([
-      fetch("/api/state?view=working&light=1", { cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/topics", { cache: "no-store" }).then((r) => r.json()),
+      fetch("/api/state?view=working&light=1", { cache: "no-store" }).then((response) => response.json()),
+      fetch("/api/topics", { cache: "no-store" }).then((response) => response.json()),
     ]).then(([state, list]) => {
-      const text = state.context?.text ?? "";
-      setDream(text); setSavedDream(text); setTopics(list.topics ?? []);
+      setContextItems(state.contextItems ?? []);
+      setTopics(list.topics ?? []);
     });
   }
   useEffect(() => { void load(); }, []);
 
-  async function saveDream() {
-    const text = dream.trim();
-    if (!text || text === savedDream.trim()) return;
+  async function saveContext() {
+    if (!contextDraft?.text.trim()) return;
     setBusy(true);
-    await fetch("/api/context", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
-    setSavedDream(text); setBusy(false);
+    setError("");
+    try {
+      const response = await fetch("/api/context", {
+        method: contextDraft.id ? "PATCH" : "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(contextDraft),
+      });
+      const result = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) throw new Error(result?.error || "Context could not be saved.");
+      setContextDraft(null);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Context could not be saved.");
+    } finally {
+      setBusy(false);
+    }
   }
-  async function saveTopic() {
-    if (!editing || !editing.label.trim()) return;
+
+  async function removeContext(id: string) {
+    if (!window.confirm("Remove this context note? Agency will stop using it for discovery and new work.")) return;
     setBusy(true);
-    await fetch("/api/topics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(editing) });
-    setEditing(null); await load(); setBusy(false);
+    setError("");
+    try {
+      const response = await fetch(`/api/context?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Context could not be removed.");
+      if (contextDraft?.id === id) setContextDraft(null);
+      await load();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Context could not be removed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveTopic() {
+    if (!editingTopic || !editingTopic.label.trim()) return;
+    setBusy(true);
+    await fetch("/api/topics", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(editingTopic) });
+    setEditingTopic(null); await load(); setBusy(false);
   }
   async function removeTopic(id: string) {
     if (!window.confirm("Remove this topic? Its cards stay and show under All until they are refiled.")) return;
@@ -45,7 +78,6 @@ export default function SettingsPage() {
     await load(); setBusy(false);
   }
 
-  const dreamChanged = dream.trim() !== savedDream.trim();
   return (
     <main className="stats-shell settings-shell">
       <header className="stats-header">
@@ -56,13 +88,38 @@ export default function SettingsPage() {
 
       <section className="settings-block">
         <div className="settings-head">
-          <h2>My dream</h2>
-          <p>Your goals and priorities. Your coding agent reads this before finding ideas and keeps its private profile up to date. Edit it whenever your priorities change.</p>
+          <h2>Context</h2>
+          <p>Add anything Agency should remember when discovering or working: priorities, responsibilities, preferences, and what to ignore.</p>
         </div>
-        <textarea className="settings-dream" value={dream} onChange={(event) => setDream(event.target.value)} placeholder="What you are aiming at, what to keep monitoring, what to leave alone." />
-        <div className="settings-actions">
-          <button className="is-dark" disabled={!dreamChanged || busy} onClick={() => void saveDream()}>{dreamChanged ? "Save dream" : "Saved"}</button>
-        </div>
+        {contextItems.length ? (
+          <ul className="settings-context-list">
+            {contextItems.map((item) => (
+              <li key={item.id}>
+                <p>{item.text}</p>
+                <div className="settings-row-actions">
+                  <button onClick={() => { setError(""); setContextDraft({ id: item.id, text: item.text }); }}>Edit</button>
+                  <button className="is-danger" disabled={busy} onClick={() => void removeContext(item.id)}>Remove</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="settings-context-empty"><strong>Give Agency its first piece of context</strong><span>You can add more whenever your focus changes.</span></div>
+        )}
+        {contextDraft ? (
+          <div className="settings-context-editor">
+            <label htmlFor="context-note">{contextDraft.id ? "Edit context" : "New context"}</label>
+            <textarea id="context-note" value={contextDraft.text} onChange={(event) => setContextDraft({ ...contextDraft, text: event.target.value })} placeholder="For example: Ignore routine medical-records messages unless someone asks for my decision." />
+            <small>Try a priority, responsibility, preference, or something discovery should ignore.</small>
+            {error && <p className="settings-error" role="alert">{error}</p>}
+            <div className="settings-actions">
+              <button disabled={busy} onClick={() => { setContextDraft(null); setError(""); }}>Cancel</button>
+              <button className="is-dark" disabled={busy || !contextDraft.text.trim()} onClick={() => void saveContext()}>{contextDraft.id ? "Save changes" : "Add context"}</button>
+            </div>
+          </div>
+        ) : (
+          <div className="settings-actions"><button className="is-dark" onClick={() => setContextDraft({ text: "" })}>Add context</button></div>
+        )}
       </section>
 
       <section className="settings-block settings-connections">
@@ -85,30 +142,30 @@ export default function SettingsPage() {
           <p>Name a topic and describe it. Your agent uses these topics when making cards.</p>
         </div>
         <ul className="settings-topics">
-          {topics.map((t) => (
-            <li key={t.id}>
+          {topics.map((topic) => (
+            <li key={topic.id}>
               <div>
-                <strong>{t.label}</strong>
-                <span>{t.hint || "no description"}</span>
+                <strong>{topic.label}</strong>
+                <span>{topic.hint || "no description"}</span>
               </div>
               <div className="settings-row-actions">
-                <button onClick={() => setEditing({ id: t.id, label: t.label, hint: t.hint })}>Edit</button>
-                <button className="is-danger" onClick={() => void removeTopic(t.id)}>Remove</button>
+                <button onClick={() => setEditingTopic({ id: topic.id, label: topic.label, hint: topic.hint })}>Edit</button>
+                <button className="is-danger" onClick={() => void removeTopic(topic.id)}>Remove</button>
               </div>
             </li>
           ))}
         </ul>
-        {editing ? (
+        {editingTopic ? (
           <div className="settings-editor">
-            <label><span>Name</span><input value={editing.label} onChange={(e) => setEditing({ ...editing, label: e.target.value })} placeholder="e.g. Hiring" /></label>
-            <label><span>Description</span><input value={editing.hint} onChange={(e) => setEditing({ ...editing, hint: e.target.value })} placeholder="What belongs here" maxLength={120} /></label>
+            <label><span>Name</span><input value={editingTopic.label} onChange={(event) => setEditingTopic({ ...editingTopic, label: event.target.value })} placeholder="e.g. Hiring" /></label>
+            <label><span>Description</span><input value={editingTopic.hint} onChange={(event) => setEditingTopic({ ...editingTopic, hint: event.target.value })} placeholder="What belongs here" maxLength={120} /></label>
             <div className="settings-actions">
-              <button onClick={() => setEditing(null)}>Cancel</button>
-              <button className="is-dark" disabled={!editing.label.trim() || busy} onClick={() => void saveTopic()}>{editing.id ? "Save topic" : "Add topic"}</button>
+              <button onClick={() => setEditingTopic(null)}>Cancel</button>
+              <button className="is-dark" disabled={!editingTopic.label.trim() || busy} onClick={() => void saveTopic()}>{editingTopic.id ? "Save topic" : "Add topic"}</button>
             </div>
           </div>
         ) : (
-          <div className="settings-actions"><button className="is-dark" onClick={() => setEditing({ label: "", hint: "" })}>Add topic</button></div>
+          <div className="settings-actions"><button className="is-dark" onClick={() => setEditingTopic({ label: "", hint: "" })}>Add topic</button></div>
         )}
       </section>
     </main>
