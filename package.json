@@ -12,6 +12,7 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "agency:claude": "node scripts/start-claude.mjs",
+    "agency:discovery": "node scripts/start-discovery.mjs",
     "share:check": "node scripts/check-share.mjs",
     "db:generate": "drizzle-kit generate",
     "card:push": "node scripts/push-card.mjs"
