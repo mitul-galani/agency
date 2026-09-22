@@ -18,18 +18,14 @@ You need:
 git clone https://github.com/mitul-galani/agency.git
 cd agency
 npm ci
-npm run dev
+npm run agency
 ```
 
-Open [http://localhost:3100](http://localhost:3100), add your first piece of context, and save it. You can add separate notes for priorities, responsibilities, preferences, and anything discovery should ignore.
+That is the whole setup. `npm run agency` starts the app and waits for it to answer. On a first run, open [http://localhost:3100](http://localhost:3100), add your first piece of context, and save it. You can add separate notes for priorities, responsibilities, preferences, and anything discovery should ignore.
 
-Keep the app running. In a second terminal:
+Once Context is ready, the same command launches Claude Opus through your existing Claude Code login. Claude tests its available connections and prepares the first cards. One terminal, and Ctrl-C stops both. No Anthropic API key is required.
 
-```sh
-npm run agency:claude
-```
-
-That command launches Claude Opus through your existing Claude Code login. Claude reads the Agency instructions, tests its available connections, and prepares the first cards. No Anthropic API key is required.
+If you already have the app running in another terminal, `npm run agency` uses it and leaves it alone when you quit. To run the two halves yourself, which is useful when the app will not start and you want to see why, `npm run dev` is the app and `npm run agency:claude` is the coordinator.
 
 ## How connected apps work
 
