@@ -7,6 +7,7 @@ import { cardShortcut } from "../lib/card-shortcut";
 import { clusterForCard, type Topic } from "../lib/card-cluster";
 import { compareByImpact, impactPoints } from "../lib/rise";
 import { MAX_TASK_LENGTH, submitNewTask } from "../lib/task-submission";
+import type { DiscoveryStatus } from "../lib/discovery-status";
 
 type Idea = {
   id: number;
@@ -53,6 +54,7 @@ type RadarState = {
   ideas: Idea[];
   laneCounts: Record<Idea["status"], number>;
   jobs: { queued: number; running: number };
+  discovery: DiscoveryStatus;
   completionStats: { verified: number; legacy: number; reviewReady: number; dismissed: number; points: number; pointsToday: number; verifiedToday: number };
   decisionMetrics: {
     tracked: number;
@@ -90,6 +92,7 @@ const emptyState: RadarState = {
   ideas: [],
   laneCounts: { new: 0, working: 0, parked: 0, done: 0 },
   jobs: { queued: 0, running: 0 },
+  discovery: { state: "idle", startedAt: null, lastFinishedAt: null, lastResult: "", nextRunAt: null, schedule: null },
   completionStats: { verified: 0, legacy: 0, reviewReady: 0, dismissed: 0, points: 0, pointsToday: 0, verifiedToday: 0 },
   decisionMetrics: {
     tracked: 0,
@@ -127,6 +130,41 @@ function decisionLabel(action: Idea["decisionAction"]) {
   if (action === "do") return "Accepted";
   if (action === "no") return "Skipped";
   return "Changed";
+}
+
+function formatDiscoveryTime(value: string | null) {
+  if (!value) return "Not recorded";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not recorded";
+  const day = date.toLocaleDateString("en-CA");
+  const today = new Date().toLocaleDateString("en-CA");
+  const tomorrow = new Date(Date.now() + 86_400_000).toLocaleDateString("en-CA");
+  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (day === today) return `Today, ${time}`;
+  if (day === tomorrow) return `Tomorrow, ${time}`;
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function DiscoveryRunStatus({ discovery }: { discovery: DiscoveryStatus }) {
+  const running = discovery.state === "running";
+  const label = running
+    ? "Running now"
+    : discovery.state === "failed"
+      ? "Last run failed"
+      : discovery.state === "stale"
+        ? "Run status unclear"
+        : discovery.schedule
+          ? "Scheduled"
+          : "Not scheduled";
+  return (
+    <section className={`radar-discovery-status is-${discovery.state}`} aria-label={`Discovery: ${label}`} aria-live="polite">
+      <header><i aria-hidden="true" /><strong>Discovery</strong><span>{label}</span></header>
+      <dl>
+        <div><dt>{running || discovery.state === "stale" ? "Started" : "Last"}</dt><dd>{formatDiscoveryTime(running || discovery.state === "stale" ? discovery.startedAt : discovery.lastFinishedAt)}</dd></div>
+        <div><dt>Next</dt><dd>{discovery.nextRunAt ? formatDiscoveryTime(discovery.nextRunAt) : "No recurring run"}</dd></div>
+      </dl>
+    </section>
+  );
 }
 
 
@@ -889,6 +927,7 @@ export function Agency() {
         </nav>
 
         <div className="radar-sidebar-bottom">
+          <DiscoveryRunStatus discovery={data.discovery} />
           <Link className="radar-scores" href="/stats" title="Points today and all time. Opens stats.">
             <span className="is-today"><b>{data.completionStats.pointsToday.toLocaleString("en-US")}</b><i>today</i></span>
             <span><b>{data.completionStats.points.toLocaleString("en-US")}</b><i>total</i></span>

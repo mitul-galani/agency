@@ -13,6 +13,8 @@ Read `me.md` if present, [APPROVALS.md](APPROVALS.md) and [LAYOUT.md](LAYOUT.md)
 
 Use subagents whenever supported for discovery, preparation and review. Give each the skill, profile, approvals and layout. One coordinator handles duplicates, approvals and integration. Coordinate shared browser access.
 
+For every discovery pass, record the real lifecycle through `POST /api/discovery-status` using `x-radar-local-agent: 1`: send `start` with a unique run ID before source checks, then `complete` or `failed` with that same ID after the pass. Include the recurring schedule on `start` when configured. This powers the user's last run, next run, and running-now status in Agency.
+
 ## Learn without interviewing
 
 - Discover enabled tools, installed CLIs and recent commands. Check bundled services. Verify accounts and read relevant mail, Slack, meetings, repositories or analytics. Distinguish failed access from untried sources.

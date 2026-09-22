@@ -91,3 +91,17 @@ export const cardInteractions = sqliteTable("card_interactions", {
   wallMs: integer("wall_ms").notNull().default(0),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const discoveryStatus = sqliteTable("discovery_status", {
+  id: integer("id").primaryKey(),
+  state: text("state").notNull().default("idle"),
+  runId: text("run_id").notNull().default(""),
+  startedAt: text("started_at"),
+  lastFinishedAt: text("last_finished_at"),
+  lastResult: text("last_result").notNull().default(""),
+  scheduleMinute: integer("schedule_minute"),
+  scheduleStartHour: integer("schedule_start_hour"),
+  scheduleEndHour: integer("schedule_end_hour"),
+  scheduleTimeZone: text("schedule_time_zone"),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});

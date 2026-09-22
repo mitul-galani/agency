@@ -10,6 +10,7 @@ Agency is a local, single-user operating layer. The web app stores the user's pr
 4. Inspect only the connectors, CLIs, and authenticated sessions available to this Claude session. A tool being installed is not proof that its account works.
 5. For each source useful to the user's goals, perform a harmless live read and classify it as Connected, Needs sign-in, or Unavailable. Never ask the user to paste Slack, Granola, Notion, Gmail, or other service credentials into Agency.
 6. Create complete, deduplicated cards after useful private preparation. Do not create setup chores as cards.
+7. At the start of every discovery pass, POST `{"event":"start","runId":"<unique-run-id>","at":"<ISO timestamp>"}` to `/api/discovery-status`. Include the active recurring schedule when one exists. At the end, POST `complete` with the same run ID, completion timestamp, and a concise result. If the pass fails, POST `failed` so the UI never silently looks current.
 
 ## Source behavior
 

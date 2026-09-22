@@ -403,6 +403,20 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
 .radar-lanes button.is-active b { background: var(--accent); color: white; }
 
 .radar-sidebar-bottom { display: grid; gap: 8px; margin-top: auto; }
+.radar-discovery-status { display: grid; gap: 9px; padding: 11px 12px; border: 1px solid rgba(255,255,255,.08); border-radius: 11px; background: rgba(255,255,255,.035); }
+.radar-discovery-status header { display: grid; grid-template-columns: 7px 1fr auto; align-items: center; gap: 7px; }
+.radar-discovery-status header i { width: 7px; height: 7px; border-radius: 50%; background: #747783; box-shadow: 0 0 0 3px rgba(255,255,255,.045); }
+.radar-discovery-status header strong { color: #d9dbe1; font-size: .72rem; line-height: 1; }
+.radar-discovery-status header span { color: var(--rail-muted); font-size: .62rem; line-height: 1; font-weight: 650; }
+.radar-discovery-status dl { display: grid; gap: 5px; margin: 0; }
+.radar-discovery-status dl div { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 8px; }
+.radar-discovery-status dt { color: #747783; font-size: .58rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }
+.radar-discovery-status dd { margin: 0; overflow: hidden; color: #b5b8c1; font-size: .64rem; line-height: 1.25; font-weight: 560; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.radar-discovery-status.is-running { border-color: rgba(72,183,122,.22); background: rgba(72,183,122,.07); }
+.radar-discovery-status.is-running header i { background: #48b77a; box-shadow: 0 0 0 3px rgba(72,183,122,.13); animation: discovery-pulse 1.8s ease-in-out infinite; }
+.radar-discovery-status.is-running header span { color: #75c99c; }
+.radar-discovery-status.is-failed header i, .radar-discovery-status.is-stale header i { background: #d39a42; box-shadow: 0 0 0 3px rgba(211,154,66,.11); }
+.radar-discovery-status.is-failed header span, .radar-discovery-status.is-stale header span { color: #d7ad6c; }
 .radar-sidebar .radar-scores { width: 100%; height: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; padding: 0; overflow: hidden; border: 1px solid rgba(255,255,255,.08); border-radius: 11px; background: rgba(255,255,255,.04); }
 .radar-sidebar .radar-scores:hover { border-color: rgba(255,255,255,.16); }
 .radar-sidebar .radar-scores > span { height: 48px; display: grid; grid-template-columns: auto auto; justify-content: center; align-content: center; gap: 3px 6px; padding: 0; border-radius: 0; color: var(--rail-text); }
@@ -487,6 +501,11 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
   to { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes discovery-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: .42; }
+}
+
 @media (max-width: 900px) {
   .radar-shell { grid-template-columns: 190px minmax(0, 1fr); padding: 10px; }
   .radar-main { padding-left: 14px; }
@@ -510,7 +529,10 @@ button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px sol
   .radar-lanes button { min-width: 0; min-height: 34px; justify-content: center; gap: 5px; padding: 0 6px; border-radius: 8px; font-size: .72rem; }
   .radar-lanes button.is-active { box-shadow: inset 0 -2px 0 var(--accent); }
   .radar-lanes button b { min-width: 18px; height: 20px; padding: 0 4px; font-size: .62rem; }
-  .radar-sidebar-bottom { display: none; }
+  .radar-sidebar-bottom { grid-column: 1 / -1; display: block; margin-top: 0; }
+  .radar-sidebar-bottom > :not(.radar-discovery-status) { display: none; }
+  .radar-discovery-status { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 12px; padding: 8px 10px; }
+  .radar-discovery-status dl { grid-template-columns: 1fr 1fr; gap: 10px; }
   .radar-header { min-height: 44px; }
   .radar-view-title span { font-size: .62rem; }
   .radar-view-title strong { font-size: 1rem; }

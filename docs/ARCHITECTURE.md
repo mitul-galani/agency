@@ -18,6 +18,8 @@ Your connected apps -> local Claude session -> Agency cards -> your decision
 
 The app listens on loopback and exposes a local agent API. It is not a multi-user server. Do not expose it through a public bind address or tunnel.
 
+Discovery coordinators mark each pass as started, completed, or failed through `/api/discovery-status`. The app stores that lifecycle and the configured recurring window locally, then uses it to show the last run, next run, and running state in the sidebar. A run that remains open for more than 90 minutes is shown as unclear instead of running forever.
+
 ## Repository boundaries
 
 Shared source includes the app, schema, migrations, tests, agent instructions, and setup scripts.
@@ -31,4 +33,3 @@ Local-only data includes:
 - cards, source exports, and generated private artifacts
 
 These paths are Git-ignored. Run `npm run share:check` before pushing changes.
-

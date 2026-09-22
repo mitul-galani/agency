@@ -2,6 +2,7 @@ import { ensureDatabase } from "../../../db";
 import { parseTopicRow } from "../../../lib/card-cluster";
 import { summarizeDecisionMetrics } from "../../../lib/decision-metrics";
 import { estimateDecisionTime, type DecisionCardInput } from "../../../lib/decision-time";
+import { DISCOVERY_STATUS_SELECT, presentDiscoveryStatus, type DiscoveryStatusRow } from "../../../lib/discovery-status";
 import { jobLeaseWindow } from "../../../lib/job-lifecycle";
 import { WAKE_PARKED_SQL } from "../../../lib/parked-card";
 
@@ -69,6 +70,7 @@ export async function GET(request: Request) {
   const requestedOnlyId = Number(url.searchParams.get("only"));
   const onlyId = Number.isInteger(requestedOnlyId) && requestedOnlyId > 0 ? requestedOnlyId : null;
   const context = await db.prepare("SELECT text, created_at AS createdAt FROM contexts ORDER BY id DESC LIMIT 1").first();
+  const discoveryRow = await db.prepare(DISCOVERY_STATUS_SELECT).first<DiscoveryStatusRow>();
   const topicRows = await db.prepare("SELECT id, label, hint FROM topics ORDER BY position, created_at").all<{ id: string; label: string; hint: string }>();
   const ideas = await db.prepare(`
     WITH visible_ideas AS (
@@ -216,6 +218,7 @@ export async function GET(request: Request) {
       done: laneCounts.done ?? 0,
     },
     jobs: { queued: jobCounts.queued ?? 0, running: jobCounts.running ?? 0 },
+    discovery: presentDiscoveryStatus(discoveryRow),
     completionStats: {
       verified: completionStats?.verified ?? 0,
       legacy: completionStats?.legacy ?? 0,
