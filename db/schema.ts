@@ -37,6 +37,9 @@ export const ideas = sqliteTable("ideas", {
   previewAsset: text("preview_asset").notNull().default(""),
   dedupeKey: text("dedupe_key").notNull(),
   status: text("status").notNull().default("new"),
+  parkedAt: text("parked_at"),
+  parkedUntil: text("parked_until"),
+  parkedNote: text("parked_note").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 }, (table) => [uniqueIndex("idx_ideas_dedupe_key").on(table.dedupeKey)]);
 
@@ -55,6 +58,7 @@ export const agentJobs = sqliteTable("agent_jobs", {
   buttonLabel: text("button_label").notNull(),
   instruction: text("instruction").notNull().default(""),
   userFeedback: text("user_feedback").notNull().default(""),
+  feedbackRevision: integer("feedback_revision").notNull().default(0),
   cardContext: text("card_context").notNull(),
   status: text("status").notNull().default("queued"),
   result: text("result").notNull().default(""),

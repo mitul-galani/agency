@@ -29,9 +29,9 @@ export async function ensureDatabase() {
 async function runMaintenance(db: ReturnType<typeof getD1>) {
   await db.batch([
     db.prepare("CREATE TABLE IF NOT EXISTS contexts (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
-    db.prepare("CREATE TABLE IF NOT EXISTS ideas (id INTEGER PRIMARY KEY AUTOINCREMENT, headline TEXT NOT NULL, why_matters TEXT NOT NULL, impact TEXT NOT NULL, finished_work TEXT NOT NULL, primary_action TEXT NOT NULL, external_action TEXT NOT NULL, score INTEGER NOT NULL, rise_reach INTEGER NOT NULL DEFAULT 0, rise_impact INTEGER NOT NULL DEFAULT 0, rise_strategic_fit INTEGER NOT NULL DEFAULT 0, rise_ease INTEGER NOT NULL DEFAULT 0, decision_estimate_ms INTEGER NOT NULL DEFAULT 0, decision_estimate_reason TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1, source_label TEXT NOT NULL, source_url TEXT NOT NULL, agent_name TEXT NOT NULL, preview_kind TEXT NOT NULL, preview_title TEXT NOT NULL, preview_body TEXT NOT NULL, preview_asset TEXT NOT NULL DEFAULT '', dedupe_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS ideas (id INTEGER PRIMARY KEY AUTOINCREMENT, headline TEXT NOT NULL, why_matters TEXT NOT NULL, impact TEXT NOT NULL, finished_work TEXT NOT NULL, primary_action TEXT NOT NULL, external_action TEXT NOT NULL, score INTEGER NOT NULL, rise_reach INTEGER NOT NULL DEFAULT 0, rise_impact INTEGER NOT NULL DEFAULT 0, rise_strategic_fit INTEGER NOT NULL DEFAULT 0, rise_ease INTEGER NOT NULL DEFAULT 0, decision_estimate_ms INTEGER NOT NULL DEFAULT 0, decision_estimate_reason TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1, source_label TEXT NOT NULL, source_url TEXT NOT NULL, agent_name TEXT NOT NULL, preview_kind TEXT NOT NULL, preview_title TEXT NOT NULL, preview_body TEXT NOT NULL, preview_asset TEXT NOT NULL DEFAULT '', dedupe_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'new', parked_at TEXT, parked_until TEXT, parked_note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, decision TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
-    db.prepare("CREATE TABLE IF NOT EXISTS agent_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, action TEXT NOT NULL, button_label TEXT NOT NULL, instruction TEXT NOT NULL DEFAULT '', user_feedback TEXT NOT NULL DEFAULT '', card_context TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', result TEXT NOT NULL DEFAULT '', ticket_outcome TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS agent_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, action TEXT NOT NULL, button_label TEXT NOT NULL, instruction TEXT NOT NULL DEFAULT '', user_feedback TEXT NOT NULL DEFAULT '', feedback_revision INTEGER NOT NULL DEFAULT 0, card_context TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', result TEXT NOT NULL DEFAULT '', ticket_outcome TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE TABLE IF NOT EXISTS card_attention (idea_id INTEGER NOT NULL, idea_version INTEGER NOT NULL, first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, active_ms INTEGER NOT NULL DEFAULT 0, view_count INTEGER NOT NULL DEFAULT 0, decision_action TEXT, decision_label TEXT NOT NULL DEFAULT '', decision_source TEXT NOT NULL DEFAULT 'user', decided_at TEXT, wall_ms INTEGER, PRIMARY KEY (idea_id, idea_version))"),
     db.prepare("CREATE TABLE IF NOT EXISTS card_interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, idea_version INTEGER NOT NULL, action TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', active_ms INTEGER NOT NULL DEFAULT 0, wall_ms INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_ideas_dedupe_key ON ideas(dedupe_key)"),
@@ -64,6 +64,15 @@ async function runMaintenance(db: ReturnType<typeof getD1>) {
   if (!names.has("decision_estimate_reason")) {
     await db.prepare("ALTER TABLE ideas ADD COLUMN decision_estimate_reason TEXT NOT NULL DEFAULT ''").run();
   }
+  if (!names.has("parked_at")) {
+    await db.prepare("ALTER TABLE ideas ADD COLUMN parked_at TEXT").run();
+  }
+  if (!names.has("parked_until")) {
+    await db.prepare("ALTER TABLE ideas ADD COLUMN parked_until TEXT").run();
+  }
+  if (!names.has("parked_note")) {
+    await db.prepare("ALTER TABLE ideas ADD COLUMN parked_note TEXT NOT NULL DEFAULT ''").run();
+  }
   const riseColumns = [
     ["rise_reach", "ALTER TABLE ideas ADD COLUMN rise_reach INTEGER NOT NULL DEFAULT 0"],
     ["rise_impact", "ALTER TABLE ideas ADD COLUMN rise_impact INTEGER NOT NULL DEFAULT 0"],
@@ -94,6 +103,9 @@ async function runMaintenance(db: ReturnType<typeof getD1>) {
   const jobNames = new Set(jobColumns.results.map((column: { name: string }) => column.name));
   if (!jobNames.has("ticket_outcome")) {
     await db.prepare("ALTER TABLE agent_jobs ADD COLUMN ticket_outcome TEXT").run();
+  }
+  if (!jobNames.has("feedback_revision")) {
+    await db.prepare("ALTER TABLE agent_jobs ADD COLUMN feedback_revision INTEGER NOT NULL DEFAULT 0").run();
   }
   // A replacement card can set an idea back to New before the agent posts its
   // terminal outcome. Reconcile from the latest explicit marker so completed,

@@ -52,7 +52,7 @@ export async function GET(request: Request) {
     )
     SELECT i.id, i.category, i.project, i.headline, i.status, i.score, i.rise_impact AS riseImpact, latest_jobs.ticket_outcome AS outcome, i.created_at AS createdAt
     FROM ideas i LEFT JOIN latest_jobs ON latest_jobs.idea_id = i.id
-    WHERE i.card_html != '' AND i.status IN ('new','working','done','rejected')
+    WHERE i.card_html != '' AND i.status IN ('new','working','parked','done','rejected')
   `).all<CardRow>();
 
   type ClusterBucket = ReturnType<typeof emptyBucket> & { open: number; done: number; rejected: number; donePoints: number };

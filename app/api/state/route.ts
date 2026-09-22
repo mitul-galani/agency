@@ -3,6 +3,7 @@ import { parseTopicRow } from "../../../lib/card-cluster";
 import { summarizeDecisionMetrics } from "../../../lib/decision-metrics";
 import { estimateDecisionTime, type DecisionCardInput } from "../../../lib/decision-time";
 import { jobLeaseWindow } from "../../../lib/job-lifecycle";
+import { WAKE_PARKED_SQL } from "../../../lib/parked-card";
 
 type IdeaRow = DecisionCardInput & Record<string, unknown>;
 type DecisionHistoryRow = DecisionCardInput & {
@@ -56,10 +57,11 @@ async function cachedDecisionRows(db: Awaited<ReturnType<typeof ensureDatabase>>
 
 export async function GET(request: Request) {
   const db = await ensureDatabase();
+  await db.prepare(WAKE_PARKED_SQL).run();
   const leaseWindow = jobLeaseWindow();
   const url = new URL(request.url);
   const requestedView = url.searchParams.get("view");
-  const view = requestedView === "working" || requestedView === "done" ? requestedView : "new";
+  const view = requestedView === "working" || requestedView === "parked" || requestedView === "done" ? requestedView : "new";
   const requestedCardId = Number(url.searchParams.get("card"));
   const selectedCardId = Number.isInteger(requestedCardId) && requestedCardId > 0 ? requestedCardId : null;
   // `light=1` omits card HTML (the Done list only needs headings); `only=<id>` returns one card.
@@ -89,8 +91,14 @@ export async function GET(request: Request) {
         i.source_url AS sourceUrl,
         i.agent_name AS agentName,
         i.dedupe_key AS dedupeKey,
+        i.parked_at AS parkedAt,
+        i.parked_until AS parkedUntil,
+        i.parked_note AS parkedNote,
         i.created_at AS createdAt,
+        i.status AS cardState,
         CASE
+          WHEN i.status = 'parked' THEN 'parked'
+          WHEN i.status = 'rejected' THEN 'done'
           WHEN j.status IN ('queued', 'running') THEN 'working'
           ELSE i.status
         END AS status,
@@ -102,7 +110,11 @@ export async function GET(request: Request) {
         j.result AS jobResult,
         j.ticket_outcome AS jobOutcome,
         j.button_label AS jobLabel,
+        j.instruction AS jobInstruction,
+        j.user_feedback AS jobUserFeedback,
+        j.feedback_revision AS jobFeedbackRevision,
         j.updated_at AS jobUpdatedAt,
+        COALESCE(j.updated_at, a.decided_at, i.created_at) AS closedAt,
         a.active_ms AS decisionActiveMs,
         a.wall_ms AS decisionWallMs,
         a.decision_action AS decisionAction
@@ -111,11 +123,11 @@ export async function GET(request: Request) {
         SELECT MAX(latest.id) FROM agent_jobs latest WHERE latest.idea_id = i.id
       )
       LEFT JOIN card_attention a ON a.idea_id = i.id AND a.idea_version = i.version AND a.decision_source = 'user'
-      WHERE i.card_html != '' AND i.status IN ('new', 'working', 'done')
+      WHERE i.card_html != '' AND i.status IN ('new', 'working', 'parked', 'done', 'rejected')
     )
     SELECT * FROM visible_ideas
     WHERE (status = ? OR (? IS NOT NULL AND id = ?)) AND (? IS NULL OR id = ?)
-    ORDER BY score DESC, id DESC
+    ORDER BY CASE WHEN status = 'done' THEN jobUpdatedAt END DESC, score DESC, id DESC
   `).bind(light && !onlyId ? 1 : 0, leaseWindow, view, selectedCardId, selectedCardId, onlyId, onlyId).all<IdeaRow>();
   const laneRows = await db.prepare(`
     WITH latest_jobs AS (
@@ -127,11 +139,16 @@ export async function GET(request: Request) {
       )
     )
     SELECT
-      CASE WHEN latest_jobs.status IN ('queued', 'running') THEN 'working' ELSE i.status END AS status,
+      CASE
+        WHEN i.status = 'parked' THEN 'parked'
+        WHEN i.status = 'rejected' THEN 'done'
+        WHEN latest_jobs.status IN ('queued', 'running') THEN 'working'
+        ELSE i.status
+      END AS status,
       COUNT(*) AS total
     FROM ideas i
     LEFT JOIN latest_jobs ON latest_jobs.idea_id = i.id
-    WHERE i.card_html != '' AND i.status IN ('new', 'working', 'done')
+    WHERE i.card_html != '' AND i.status IN ('new', 'working', 'parked', 'done', 'rejected')
     GROUP BY 1
   `).all<{ status: string; total: number }>();
   const jobs = await db.prepare(`
@@ -195,6 +212,7 @@ export async function GET(request: Request) {
     laneCounts: {
       new: laneCounts.new ?? 0,
       working: laneCounts.working ?? 0,
+      parked: laneCounts.parked ?? 0,
       done: laneCounts.done ?? 0,
     },
     jobs: { queued: jobCounts.queued ?? 0, running: jobCounts.running ?? 0 },

@@ -25,13 +25,21 @@ type Idea = {
   sourceUrl: string;
   agentName: string;
   createdAt: string;
-  status: "new" | "working" | "done";
+  cardState: "new" | "working" | "parked" | "done" | "rejected";
+  status: "new" | "working" | "parked" | "done";
+  parkedAt: string | null;
+  parkedUntil: string | null;
+  parkedNote: string;
   jobId: number | null;
   jobStatus: "queued" | "running" | "done" | "failed" | null;
   jobOutcome: "completed" | "review" | "blocked" | null;
   jobResult: string | null;
   jobLabel: string | null;
+  jobInstruction: string | null;
+  jobUserFeedback: string | null;
+  jobFeedbackRevision: number | null;
   jobUpdatedAt: string | null;
+  closedAt: string | null;
   decisionActiveMs: number | null;
   decisionWallMs: number | null;
   decisionAction: "do" | "change" | "no" | null;
@@ -80,7 +88,7 @@ const emptyState: RadarState = {
   context: null,
   topics: [],
   ideas: [],
-  laneCounts: { new: 0, working: 0, done: 0 },
+  laneCounts: { new: 0, working: 0, parked: 0, done: 0 },
   jobs: { queued: 0, running: 0 },
   completionStats: { verified: 0, legacy: 0, reviewReady: 0, dismissed: 0, points: 0, pointsToday: 0, verifiedToday: 0 },
   decisionMetrics: {
@@ -97,13 +105,22 @@ const emptyState: RadarState = {
   },
 };
 
+const CLAUDE_START_COMMAND = "npm run agency:claude";
+
 function formatDuration(milliseconds: number | null) {
-  if (milliseconds === null || !Number.isFinite(milliseconds)) return "—";
+  if (milliseconds === null || !Number.isFinite(milliseconds)) return "Not set";
   const seconds = Math.max(0, Math.round(milliseconds / 1000));
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${minutes}m`;
   return `${Math.round(minutes / 60)}h`;
+}
+
+function formatParkedUntil(value: string | null) {
+  if (!value) return "until you bring it back";
+  const date = new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
+  if (Number.isNaN(date.getTime())) return "until its return time";
+  return `until ${date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`;
 }
 
 function decisionLabel(action: Idea["decisionAction"]) {
@@ -262,13 +279,13 @@ function DoneList({ ideas, topics, onAction, onInteraction }: { ideas: Idea[]; t
   const groups = useMemo(() => {
     const map = new Map<string, Idea[]>();
     for (const idea of ideas) {
-      const key = dayKey(idea.jobUpdatedAt);
+      const key = dayKey(idea.closedAt ?? idea.jobUpdatedAt);
       map.set(key, [...(map.get(key) ?? []), idea]);
     }
     return [...map.entries()].toSorted(([a], [b]) => (a === "earlier" ? 1 : b === "earlier" ? -1 : a < b ? 1 : -1));
   }, [ideas]);
   const shown = day === "all" ? groups : groups.filter(([key]) => key === day);
-  const pointsFor = (idea: Idea) => (idea.jobOutcome === "completed" ? impactPoints(idea) : 0);
+  const pointsFor = (idea: Idea) => (idea.cardState !== "rejected" && idea.jobOutcome === "completed" ? impactPoints(idea) : 0);
   return (
     <section className="radar-done">
       <nav className="radar-done-days" aria-label="Filter done by day">
@@ -280,22 +297,23 @@ function DoneList({ ideas, topics, onAction, onInteraction }: { ideas: Idea[]; t
       <div className="radar-done-scroll">
         {shown.map(([key, items]) => (
           <section key={key} className="radar-done-day">
-            <h2>{dayLabel(key)} <span>{items.length} done · {items.reduce((sum, idea) => sum + pointsFor(idea), 0)} pts</span></h2>
+            <h2>{dayLabel(key)} <span>{items.length} closed · {items.reduce((sum, idea) => sum + pointsFor(idea), 0)} pts</span></h2>
             <ul>
               {items.map((idea) => {
                 const cluster = clusterForCard(idea, topics) || "none";
+                const dismissed = idea.cardState === "rejected";
                 const open = openId === idea.id;
                 return (
                   <li key={idea.id} className={open ? "is-open" : ""}>
                     <button className="radar-done-row" onClick={() => { setOpenId(open ? null : idea.id); onInteraction(idea, open ? "collapse" : "expand", "Done list"); }} aria-expanded={open}>
                       <i className={`is-${cluster}`} />
                       <strong>{idea.headline}</strong>
-                      <span>{idea.jobLabel || decisionLabel(idea.decisionAction)}{idea.jobOutcome === "completed" ? " · verified" : idea.jobOutcome === "review" ? " · reviewed" : ""}{idea.decisionActiveMs ? ` · ${formatDuration(idea.decisionActiveMs)}` : ""}</span>
-                      <em>{pointsFor(idea) ? `+${pointsFor(idea)}` : ""}</em>
+                      <span>{idea.jobLabel || decisionLabel(idea.decisionAction)}{!dismissed && idea.jobOutcome === "completed" ? " · verified" : !dismissed && idea.jobOutcome === "review" ? " · reviewed" : ""}{idea.decisionActiveMs ? ` · ${formatDuration(idea.decisionActiveMs)}` : ""}</span>
+                      <em className={dismissed ? "is-dismissed" : ""}>{dismissed ? "Dismissed" : pointsFor(idea) ? `+${pointsFor(idea)}` : ""}</em>
                     </button>
                     {open && (
                       <div className="radar-done-card">
-                        {idea.jobResult && <p className="radar-done-result">{summarizeJobResult(idea.jobResult)}</p>}
+                        <p className="radar-done-result">{idea.jobResult ? summarizeJobResult(idea.jobResult) : `${idea.jobLabel || "Agency"} finished this step.`}</p>
                         {cardHtml[idea.id] || idea.cardHtml
                           ? <AgentCard idea={{ ...idea, cardHtml: cardHtml[idea.id] || idea.cardHtml }} actionable={false} onAction={(action) => onAction(idea, action)} onInteraction={(action, label) => onInteraction(idea, action, label)} />
                           : <p className="radar-done-empty">Loading card…</p>}
@@ -315,7 +333,7 @@ function DoneList({ ideas, topics, onAction, onInteraction }: { ideas: Idea[]; t
 
 export function Agency() {
   const [data, setData] = useState<RadarState>(emptyState);
-  const [view, setView] = useState<"new" | "working" | "done">("new");
+  const [view, setView] = useState<Idea["status"]>("new");
   const [cluster, setCluster] = useState<string>("all");
   const [sort, setSort] = useState<SortMode>(readSortMode);
   const sortRef = useRef<SortMode>(sort);
@@ -437,14 +455,19 @@ export function Agency() {
   const feedbackKey = active ? cardDraftKey(active) : "";
   const feedback = feedbackKey ? feedbackDrafts[feedbackKey] ?? "" : "";
   const activeLiveState = latestSelected ?? active;
-  const activeJob = activeLiveState?.jobId ? {
+  const activeJob = useMemo(() => activeLiveState?.jobId ? ({
     id: activeLiveState.jobId,
     status: activeLiveState.jobStatus,
     outcome: activeLiveState.jobOutcome,
     result: activeLiveState.jobResult?.trim() ?? "",
     label: activeLiveState.jobLabel?.trim() ?? "",
-  } : null;
+    instruction: activeLiveState.jobInstruction?.trim() ?? "",
+    feedback: activeLiveState.jobUserFeedback?.trim() ?? "",
+    feedbackRevision: Number(activeLiveState.jobFeedbackRevision ?? 0),
+  }) : null, [activeLiveState]);
   const jobInFlight = activeJob?.status === "queued" || activeJob?.status === "running";
+  const lastRoundInstruction = activeJob ? [activeJob.instruction, activeJob.feedback].filter(Boolean).join("\n") : "";
+  const showLastRound = view === "new" && activeJob && !jobInFlight && (lastRoundInstruction || activeJob.result);
   const attentionIdeaId = active?.id ?? null;
   const attentionIdeaVersion = active?.version ?? null;
   const attentionDecisionAction = active?.decisionAction ?? null;
@@ -522,6 +545,16 @@ export function Agency() {
     }).catch(() => undefined);
   }, [takePendingActiveMs]);
 
+  const move = useCallback((direction: number) => {
+    if (!visibleIdeas.length) return;
+    recordCardInteraction(active, direction > 0 ? "next" : "back", direction > 0 ? "Next card" : "Previous card");
+    const currentIndex = active ? visibleIdeas.findIndex((idea) => idea.id === active.id) : -1;
+    const startingIndex = currentIndex >= 0 ? currentIndex : direction > 0 ? -1 : 0;
+    const nextIndex = (startingIndex + direction + visibleIdeas.length) % visibleIdeas.length;
+    selectIdea(visibleIdeas[nextIndex]);
+    setMessage("");
+  }, [active, recordCardInteraction, selectIdea, visibleIdeas]);
+
   const sendToAgent = useCallback(async (target: Idea, action: "do" | "change" | "no", label: string, prompt = "", note = "") => {
     const activeMs = takePendingActiveMs(target.id, target.version);
     const response = await fetch("/api/ideas/action", {
@@ -579,10 +612,35 @@ export function Agency() {
   const submitFeedback = useCallback(async () => {
     const note = feedback.trim();
     const target = active;
-    if (!target || !note || jobInFlight || feedbackSubmitting) return;
+    if (!target || !note || feedbackSubmitting) return;
 
     setFeedbackSubmitting(true);
     try {
+      if (jobInFlight && activeJob) {
+        const response = await fetch("/api/agent-jobs/addendum", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jobId: activeJob.id, ideaId: target.id, note }),
+        });
+        if (response.status === 409) {
+          await load();
+          setMessage("That step just finished. Your note is still here so you can send it as a follow-up.");
+          return;
+        }
+        if (!response.ok) {
+          setMessage("That instruction did not reach Agency. Try once more.");
+          return;
+        }
+        const targetDraftKey = cardDraftKey(target);
+        setFeedbackDrafts((current) => {
+          const next = { ...current };
+          delete next[targetDraftKey];
+          return next;
+        });
+        setMessage("Added to the current job. Agency must read it before finishing.");
+        await load(view, { preferred: target });
+        return;
+      }
       await sendToAgent(
         target,
         "change",
@@ -593,7 +651,7 @@ export function Agency() {
     } finally {
       setFeedbackSubmitting(false);
     }
-  }, [active, feedback, feedbackSubmitting, jobInFlight, sendToAgent]);
+  }, [active, activeJob, feedback, feedbackSubmitting, jobInFlight, load, sendToAgent, view]);
 
   const submitImprove = useCallback(async () => {
     if (!active || jobInFlight || feedbackSubmitting) return;
@@ -612,7 +670,7 @@ export function Agency() {
   }, [active, feedbackSubmitting, jobInFlight, sendToAgent]);
 
   const submitSkip = useCallback(async () => {
-    if (!active || feedbackSubmitting) return;
+    if (!active || jobInFlight || feedbackSubmitting) return;
 
     setFeedbackSubmitting(true);
     try {
@@ -620,7 +678,36 @@ export function Agency() {
     } finally {
       setFeedbackSubmitting(false);
     }
-  }, [active, feedbackSubmitting, sendToAgent]);
+  }, [active, feedbackSubmitting, jobInFlight, sendToAgent]);
+
+  const submitTogglePark = useCallback(async () => {
+    const target = active;
+    if (!target || jobInFlight || feedbackSubmitting) return;
+    const action = target.status === "parked" ? "unpark" : "park";
+    setFeedbackSubmitting(true);
+    try {
+      const response = await fetch("/api/ideas/park", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: target.id, version: target.version, action, until: null }),
+      });
+      if (response.status === 409) {
+        await load();
+        setMessage("That card changed. Check it and try again.");
+        return;
+      }
+      if (!response.ok) {
+        setMessage(action === "park" ? "That card could not be parked. Try once more." : "That card could not be brought back. Try once more.");
+        return;
+      }
+      const nextSelection = nextCardAfterRemoval(target.id, visibleIdeas);
+      selectIdea(nextSelection);
+      setMessage(action === "park" ? "Parked. It will stay there until you or Agency brings it back." : "Moved back to New.");
+      await load(view, { preferred: nextSelection, excludeId: target.id });
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }, [active, feedbackSubmitting, jobInFlight, load, selectIdea, view, visibleIdeas]);
 
   useEffect(() => {
     if (!active || composer) return;
@@ -646,6 +733,9 @@ export function Agency() {
       } else if (action === "improve") {
         event.preventDefault();
         void submitImprove();
+      } else if (action === "park") {
+        event.preventDefault();
+        void submitTogglePark();
       } else if (action === "previous") {
         event.preventDefault();
         move(-1);
@@ -662,7 +752,7 @@ export function Agency() {
     };
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
-  }, [active, composer, submitImprove, submitSkip]);
+  }, [active, composer, move, submitImprove, submitSkip, submitTogglePark]);
 
 
   async function submitTell() {
@@ -707,17 +797,7 @@ export function Agency() {
     }
   }
 
-  function move(direction: number) {
-    if (!visibleIdeas.length) return;
-    recordCardInteraction(active, direction > 0 ? "next" : "back", direction > 0 ? "Next card" : "Previous card");
-    const currentIndex = active ? visibleIdeas.findIndex((idea) => idea.id === active.id) : -1;
-    const startingIndex = currentIndex >= 0 ? currentIndex : direction > 0 ? -1 : 0;
-    const nextIndex = (startingIndex + direction + visibleIdeas.length) % visibleIdeas.length;
-    selectIdea(visibleIdeas[nextIndex]);
-    setMessage("");
-  }
-
-  function selectView(next: "new" | "working" | "done") {
+  function selectView(next: Idea["status"]) {
     setComposer(null);
     recordCardInteraction(active, "lane", next);
     setView(next);
@@ -739,19 +819,50 @@ export function Agency() {
     setComposer("task");
   }
 
+  function copyClaudeCommand() {
+    void navigator.clipboard.writeText(CLAUDE_START_COMMAND).then(
+      () => setMessage("Copied. Run it in a second terminal while Agency is open."),
+      () => setMessage(`Copy this command: ${CLAUDE_START_COMMAND}`),
+    );
+  }
+
 
   if (loading) return <main className="radar-loading">Opening Agency…</main>;
   if (!data.context?.text?.trim()) {
     return (
-      <main className="radar-shell radar-first-run">
-        <section className="radar-context">
-          <header>
-            <p>What&rsquo;s your dream right now?</p>
-            <small>Your coding agent can learn this from your recent work and fill it in. Or write a few words below. This page saves your dream; your coding agent creates the cards.</small>
+      <main className="radar-onboarding-shell">
+        <section className="radar-onboarding" aria-labelledby="onboarding-title">
+          <header className="radar-onboarding-intro">
+            <div className="radar-onboarding-brand"><span aria-hidden="true">A</span><strong>Agency</strong></div>
+            <p>Personal operating layer</p>
+            <h1 id="onboarding-title">Turn your real work into a clear queue.</h1>
+            <small>Agency uses your local Claude session and the apps already connected to it. Your cards and profile stay on this machine.</small>
           </header>
-          <textarea value={contextDraft} onChange={(event) => setContextDraft(event.target.value)} placeholder="What do you want to achieve? What should your agent pay attention to?" />
-          {composerError && <p className="radar-task-error" role="alert">{composerError}</p>}
-          <footer><div><button className="is-dark" disabled={taskSubmitting || !contextDraft.trim()} onClick={() => void submitTell()}>{taskSubmitting ? "Saving…" : "Save dream"}</button></div></footer>
+
+          <div className="radar-onboarding-grid">
+            <section className="radar-onboarding-form">
+              <label htmlFor="agency-dream">What should Agency help you stay on top of?</label>
+              <p>Describe your role, current priorities, recurring responsibilities, and anything it should ignore.</p>
+              <textarea id="agency-dream" value={contextDraft} onChange={(event) => setContextDraft(event.target.value)} placeholder="I want one place to see the decisions, follow-ups, and work that need my attention…" />
+              {composerError && <p className="radar-task-error" role="alert">{composerError}</p>}
+              <button className="is-primary" disabled={taskSubmitting || !contextDraft.trim()} onClick={() => void submitTell()}>{taskSubmitting ? "Saving…" : "Save and continue"}</button>
+            </section>
+
+            <aside className="radar-onboarding-connections">
+              <h2>Your existing connections come with you</h2>
+              <p>Do not paste credentials into Agency. Claude checks the services it can already access and tells you what needs attention.</p>
+              <div className="radar-source-list" aria-label="Example sources">
+                {['Slack', 'Granola', 'Notion', 'Gmail', 'Calendar', 'GitHub'].map((source) => <span key={source}>{source}</span>)}
+              </div>
+              <ol>
+                <li><strong>Set your focus</strong><span>Give Agency enough context to judge what matters.</span></li>
+                <li><strong>Start Claude</strong><span>One command launches the coordinator with your existing Claude login.</span></li>
+                <li><strong>Review prepared work</strong><span>Approve, redirect, park, or dismiss each card.</span></li>
+              </ol>
+            </aside>
+          </div>
+
+          <footer className="radar-onboarding-note">Local by default. No hosted account, shared database, or separate API key required.</footer>
         </section>
       </main>
     );
@@ -759,13 +870,42 @@ export function Agency() {
 
   return (
     <main className="radar-shell">
-      <header className="radar-header">
-        <div className="radar-bar-left" aria-hidden="true" />
-        <nav aria-label="Agency queue">
-            <button aria-label={`New, ${laneCounts.new} tickets`} className={view === "new" ? "is-active" : ""} onClick={() => selectView("new")}>New <b>{laneCounts.new}</b></button>
-            <button aria-label={`Working, ${laneCounts.working} tickets`} className={view === "working" ? "is-active" : ""} onClick={() => selectView("working")}>Working <b>{laneCounts.working}</b></button>
-            <button aria-label={`Done, ${laneCounts.done} tickets`} className={view === "done" ? "is-active" : ""} onClick={() => selectView("done")}>Done <b>{laneCounts.done}</b></button>
+      <aside className="radar-sidebar">
+        <div className="radar-brand">
+          <span className="radar-brand-mark" aria-hidden="true">A</span>
+          <span><strong>Agency</strong><small>Personal work shell</small></span>
+        </div>
+
+        <button className={`radar-tell${composer ? " is-open" : ""}`} disabled={taskSubmitting} onClick={() => (composer ? setComposer(null) : openNewTask())}>
+          <span aria-hidden="true">+</span> New task
+        </button>
+
+        <nav className="radar-lanes" aria-label="Agency queue">
+          <span className="radar-nav-label">Queue</span>
+          <button aria-label={`New, ${laneCounts.new} tickets`} className={view === "new" ? "is-active" : ""} onClick={() => selectView("new")}><span>New</span><b>{laneCounts.new}</b></button>
+          <button aria-label={`Working, ${laneCounts.working} tickets`} className={view === "working" ? "is-active" : ""} onClick={() => selectView("working")}><span>Working</span><b>{laneCounts.working}</b></button>
+          <button aria-label={`Parked, ${laneCounts.parked} tickets`} className={view === "parked" ? "is-active" : ""} onClick={() => selectView("parked")}><span>Parked</span><b>{laneCounts.parked}</b></button>
+          <button aria-label={`Done, ${laneCounts.done} tickets`} className={view === "done" ? "is-active" : ""} onClick={() => selectView("done")}><span>Done</span><b>{laneCounts.done}</b></button>
         </nav>
+
+        <div className="radar-sidebar-bottom">
+          <Link className="radar-scores" href="/stats" title="Points today and all time. Opens stats.">
+            <span className="is-today"><b>{data.completionStats.pointsToday.toLocaleString("en-US")}</b><i>today</i></span>
+            <span><b>{data.completionStats.points.toLocaleString("en-US")}</b><i>total</i></span>
+          </Link>
+          <Link className="radar-settings-link" href="/settings">Settings</Link>
+          <footer className="radar-footer">
+            <i /> {data.jobs.running ? `${data.jobs.running} jobs running` : data.jobs.queued ? `${data.jobs.queued} queued` : "Agency is ready"}
+          </footer>
+        </div>
+      </aside>
+
+      <section className="radar-main">
+      <header className="radar-header">
+        <div className="radar-view-title">
+          <span>{view === "new" ? "Focus queue" : view === "working" ? "In progress" : view === "parked" ? "Out of the way" : "Work history"}</span>
+          <strong>{view === "new" ? "Ready for you" : view === "working" ? "Agency is working" : view === "parked" ? "Parked for later" : "Closed"}</strong>
+        </div>
         <div className="radar-header-right">
           {active && composer === null && view !== "done" && (
             <span className="radar-card-chips" title={`This card: score ${impactPoints(active)} of 10, about ${formatDuration(active.decisionEstimateMs)} to decide.`}>
@@ -773,19 +913,11 @@ export function Agency() {
               <span><b>{formatDuration(active.decisionEstimateMs)}</b><i>effort</i></span>
             </span>
           )}
-          <Link className="radar-scores" href="/stats" title="Points today and all time. Opens stats.">
-            <span className="is-today"><b>{data.completionStats.pointsToday.toLocaleString("en-US")}</b><i>today</i></span>
-            <span><b>{data.completionStats.points.toLocaleString("en-US")}</b><i>total</i></span>
-          </Link>
         </div>
       </header>
 
 
       <nav className="radar-clusters" aria-label="Filter by kind of work">
-        <div className="radar-side-actions">
-          <button className={`radar-tell${composer ? " is-open" : ""}`} disabled={taskSubmitting} onClick={() => (composer ? setComposer(null) : openNewTask())}>New task</button>
-          <Link className="radar-settings-link" href="/settings">Settings</Link>
-        </div>
         <div className="radar-sort" role="group" aria-label="Sort">
           {([["newest", "Newest"], ["score", "Score"], ["effort", "Effort"]] as const).map(([key, label]) => {
             const activeKey = sort.key === key;
@@ -830,36 +962,61 @@ export function Agency() {
         <DoneList ideas={visibleIdeas} topics={data.topics} onAction={(idea, action) => { if (action.action === "open" && action.url) window.open(new URL(action.url, window.location.origin).toString(), "_blank", "noopener"); }} onInteraction={(idea, action, label) => recordCardInteraction(idea, action, label)} />
       ) : active ? (
         <section className="radar-workspace">
-          {jobInFlight && <span className="radar-working" role="status">Agency is working on this card</span>}
+          {active.status === "parked" && <span className="radar-parked" role="status">Parked {formatParkedUntil(active.parkedUntil)}</span>}
+          {jobInFlight && activeJob && (
+            <section className="radar-job-brief" aria-label="Your instructions for this job">
+              <header><span>Your instructions</span><b>{activeJob.status === "queued" ? "Queued" : "In progress"}</b></header>
+              <strong>{activeJob.label || "Work on this card"}</strong>
+              {activeJob.instruction && <p>{activeJob.instruction}</p>}
+              {activeJob.feedback && <p className="is-feedback">{activeJob.feedback}</p>}
+            </section>
+          )}
+          {showLastRound && activeJob && (
+            <section className="radar-last-round" aria-label="Last round with Agency">
+              <header><span>Last round</span><b>{activeJob.outcome === "review" ? "Back for review" : activeJob.status === "failed" ? "Needs attention" : "Finished"}</b></header>
+              {lastRoundInstruction && <div><strong>What you asked</strong><p>{lastRoundInstruction}</p></div>}
+              <div><strong>What Agency did</strong><p>{activeJob.result || "No completion note was saved."}</p></div>
+            </section>
+          )}
           <section className="radar-card-host">
             <AgentCard idea={active} actionable={!jobInFlight} onAction={handleCardAction} onInteraction={(action, label) => recordCardInteraction(active, action, label)} />
           </section>
 
           <section className="radar-inline-change">
             <textarea
-              aria-label="Change this card"
+              aria-label={jobInFlight ? "Add an instruction to the current job" : "Change this card"}
               value={feedback}
               rows={1}
-              disabled={jobInFlight || feedbackSubmitting}
+              disabled={feedbackSubmitting}
               onChange={(event) => { updateFeedback(event.target.value); event.target.style.height = "auto"; event.target.style.height = `${Math.min(event.target.scrollHeight, 180)}px`; }}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
                 event.preventDefault();
                 void submitFeedback();
               }}
-              placeholder={jobInFlight || feedbackSubmitting
-                ? "Agency is already changing this card."
-                : "Add context or say what to change… Enter to start typing, Enter sends, Shift+Enter adds a line"}
+              placeholder={feedbackSubmitting
+                ? "Adding your instruction…"
+                : jobInFlight
+                  ? "Add another instruction while Agency works…"
+                  : "Add context or say what to change… Enter sends, Shift+Enter adds a line"}
             />
             <div className="radar-inline-actions">
               <button
+                className="is-park radar-shortcut-hint"
+                disabled={jobInFlight || feedbackSubmitting}
+                aria-keyshortcuts="P"
+                aria-label={active.status === "parked" ? "Bring this card back to New" : "Park this card"}
+                data-shortcut-hint={active.status === "parked" ? "Bring back · P" : "Park · P"}
+                onClick={() => void submitTogglePark()}
+              >{active.status === "parked" ? "Bring back" : "Park"}<kbd>P</kbd></button>
+              <button
                 className="is-skip radar-shortcut-hint"
-                disabled={feedbackSubmitting}
+                disabled={jobInFlight || feedbackSubmitting}
                 aria-keyshortcuts="S"
                 aria-label="Skip this card"
                 data-shortcut-hint="Skip · S"
                 onClick={() => void submitSkip()}
-              ><svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" fill="none"/></svg></button>
+              >Skip <kbd>S</kbd></button>
               <button
                 className="is-improve radar-shortcut-hint"
                 disabled={jobInFlight || feedbackSubmitting}
@@ -867,14 +1024,14 @@ export function Agency() {
                 onClick={() => void submitImprove()}
                 aria-label="Auto-improve this card"
                 data-shortcut-hint="Auto-improve · I"
-              ><span aria-hidden="true">✦</span> Auto-improve</button>
+              >Improve <kbd>I</kbd></button>
               <button
                 className="is-send radar-shortcut-hint"
-                disabled={jobInFlight || feedbackSubmitting || !feedback.trim()}
-                aria-label="Send"
-                data-shortcut-hint="Send · Enter in feedback"
+                disabled={feedbackSubmitting || !feedback.trim()}
+                aria-label={jobInFlight ? "Add instruction" : "Send"}
+                data-shortcut-hint={jobInFlight ? "Add instruction · Enter" : "Send · Enter in feedback"}
                 onClick={() => void submitFeedback()}
-              ><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M8 13V3M3.5 7.5L8 3l4.5 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></svg></button>
+              >{jobInFlight ? "Add" : "Send"} <kbd>↵</kbd></button>
             </div>
           </section>
 
@@ -884,16 +1041,27 @@ export function Agency() {
             <button className="radar-shortcut-hint" data-shortcut-hint="Next card · →" aria-keyshortcuts="ArrowRight" onClick={() => move(1)} aria-label="Next card">Next →</button>
           </div>
         </section>
+      ) : view === "new" && !Object.values(laneCounts).some(Boolean) ? (
+        <section className="radar-empty radar-empty-setup">
+          <div>
+            <span className="radar-setup-kicker">Your focus is saved</span>
+            <h2>Start your Agency coordinator</h2>
+            <p>Keep this app open, then run the command below in a second terminal. Claude will use its existing connections, verify each source with a live read, and prepare your first cards.</p>
+            <div className="radar-command">
+              <code>{CLAUDE_START_COMMAND}</code>
+              <button onClick={copyClaudeCommand}>Copy</button>
+            </div>
+            <small>Agency never asks you to paste Slack, Granola, Notion, or Gmail credentials into this app.</small>
+          </div>
+        </section>
       ) : (
-        <section className="radar-empty"><strong>{view === "new" ? "No new cards. Ask your coding agent to start Agency." : view === "working" ? "No agents working." : "Nothing done yet."}</strong></section>
+        <section className="radar-empty"><strong>{view === "new" ? "You are caught up." : view === "working" ? "No agents working." : view === "parked" ? "Nothing parked." : "Nothing done yet."}</strong></section>
       )}
 
       {!composer && message && <div className="radar-message" role="status">{message}</div>}
 
-      <footer className="radar-footer">
-        <i /> {data.jobs.running ? `${data.jobs.running} jobs running` : data.jobs.queued ? `${data.jobs.queued} queued for your coding agent` : "No queued work"}
-        {data.decisionMetrics.tracked > 0 && <> · you decide in {formatDuration(data.decisionMetrics.medianAcceptedActiveMs)} on average</>}
-      </footer>
+      {data.decisionMetrics.tracked > 0 && <footer className="radar-main-footer">You decide in {formatDuration(data.decisionMetrics.medianAcceptedActiveMs)} on average</footer>}
+      </section>
     </main>
   );
 }

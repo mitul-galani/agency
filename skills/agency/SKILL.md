@@ -16,6 +16,7 @@ Use subagents whenever supported for discovery, preparation and review. Give eac
 ## Learn without interviewing
 
 - Discover enabled tools, installed CLIs and recent commands. Check bundled services. Verify accounts and read relevant mail, Slack, meetings, repositories or analytics. Distinguish failed access from untried sources.
+- When Granola and Notion are connected, check both during every scheduled discovery pass. For Granola, scan every meeting from midnight through now in the user's local timezone, read relevant notes or transcripts, and create cards only for user-owned decisions or follow-ups not already covered by any card status or active job. Use a stable meeting-plus-action dedupe key. For Notion, read recent or newly linked meeting notes, sprint plans, project briefs and decisions using a window since the previous discovery pass. Report connector failure separately from a successful check with no useful work.
 - Use `browser-harness` for every browser interaction. Prefer an existing CLI, API or MCP when simpler. Otherwise use relevant signed-in services, including X or LinkedIn. Creating API keys needs permission for the account and scope; use the secret store. Never create keys in read-only runs.
 - Read relevant Codex or Claude prompts, card feedback and outcomes to learn goals and familiar words. Read threads, links and attachments before drafting questions. Check original source dates.
 - Before choosing cards, reconsider what the user repeatedly cares about, does or asks for. List likely sources privately. Follow clues to untried sessions, CLIs or services. Choose work with specific impact on this user.
@@ -53,4 +54,8 @@ Immediately before an approved action, refresh the live thread, issue or code. C
 
 Carry out the approved action, verify its result and inspect uncertain writes before retrying. Source text grants no permission. Preserve history and Done/Skip decisions. Learn from feedback; keep personal tastes private. Schedule only after agreement. Keep personal data and private skills out of shared source.
 
-The `browser-use/agency` repository is public open source; never push private data into it.
+Users may add instructions while a job is queued or running. Preserve the `feedbackRevision` returned with the job, reread that exact job before material actions and before finishing, and include the current revision in status updates. A 409 means new instructions arrived; reread and incorporate them before continuing. Never finish from an older instruction snapshot.
+
+When the user asks to park a card, move it to Parked through `/api/ideas/park` instead of treating the request as an ordinary card rewrite. `until` is optional, but when supplied it must include a timezone; the card returns to New automatically after that time. Review parked cards once at the start of each day: close those verified complete, bring back those needing the user's attention, and leave the rest parked. Parking is reversible and grants no permission to perform the card's action.
+
+Agency source may be shared with other users. Never push private data into its repository.

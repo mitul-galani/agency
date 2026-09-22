@@ -1,0 +1,1 @@
+ALTER TABLE `agent_jobs` ADD `feedback_revision` integer DEFAULT 0 NOT NULL;

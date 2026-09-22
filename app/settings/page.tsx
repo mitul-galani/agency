@@ -12,6 +12,7 @@ export default function SettingsPage() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [editing, setEditing] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   function load() {
     return Promise.all([
@@ -61,6 +62,20 @@ export default function SettingsPage() {
         <textarea className="settings-dream" value={dream} onChange={(event) => setDream(event.target.value)} placeholder="What you are aiming at, what to keep monitoring, what to leave alone." />
         <div className="settings-actions">
           <button className="is-dark" disabled={!dreamChanged || busy} onClick={() => void saveDream()}>{dreamChanged ? "Save dream" : "Saved"}</button>
+        </div>
+      </section>
+
+      <section className="settings-block settings-connections">
+        <div className="settings-head">
+          <h2>Connected apps</h2>
+          <p>Agency uses the tools and accounts already available to your local Claude session. Credentials are never stored in this app.</p>
+        </div>
+        <div className="settings-source-list" aria-label="Common Agency sources">
+          {['Slack', 'Granola', 'Notion', 'Gmail', 'Calendar', 'GitHub'].map((source) => <span key={source}>{source}</span>)}
+        </div>
+        <div className="settings-connection-note">
+          <div><strong>Check access from Claude</strong><span>Claude performs a harmless live read and reports Connected, Needs sign-in, or Unavailable for each useful source.</span></div>
+          <button onClick={() => { void navigator.clipboard.writeText('npm run agency:claude').then(() => setCopied(true)); }}>{copied ? 'Copied' : 'Copy start command'}</button>
         </div>
       </section>
 
