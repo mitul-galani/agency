@@ -14,7 +14,7 @@ Agency is a local, single-user operating layer. The web app stores the user's pr
 ## Source behavior
 
 - Use the user's existing Claude connections. Agency has no separate connector vault.
-- Treat Granola and Notion as normal sources when available. For Granola, scan every meeting from midnight through now in the user's local timezone and card only action items not already covered by an existing card or agent job. Use stable meeting-plus-action dedupe keys.
+- Treat Muesli, Granola, and Notion as normal sources when available. For Muesli and Granola, scan every meeting from midnight through now in the user's local timezone and card only action items not already covered by an existing card or agent job. Read the original transcript for relevant meetings. During a migration or overlap, deduplicate the same meeting and action across both sources before creating a card. Use stable source-meeting-plus-action dedupe keys.
 - Keep other recurring discovery sources on a bounded incremental window with a small overlap.
 - Report a successful check with no useful work separately from authentication, permission, or connector failure.
 - Never infer access from a browser login or connector name alone.
@@ -25,4 +25,3 @@ Agency is a local, single-user operating layer. The web app stores the user's pr
 - Keep credentials, personal profiles, cards, databases, source exports, and generated private artifacts out of git.
 - Do not create a recurring schedule until the user explicitly chooses a cadence. If they do, keep one coordinator responsible for discovery and a separate coordinator for executing queued work.
 - Keep Claude on the model selected by the launcher. Do not spawn subagents unless the user asks.
-
