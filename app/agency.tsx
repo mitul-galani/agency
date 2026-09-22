@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cardDraftKey, keepSelectedCard, nextCardAfterRemoval } from "../lib/card-focus";
+import { cardSelectionSubmission, normalizeCardSelection, type CardSelectionMode } from "../lib/card-selection";
 import { cardShortcut } from "../lib/card-shortcut";
 import { clusterForCard, type Topic } from "../lib/card-cluster";
 import { compareByImpact, impactPoints } from "../lib/rise";
@@ -75,6 +76,19 @@ type CardAction = {
   label?: string;
   prompt?: string;
   url?: string;
+};
+
+type CardTextSelection = {
+  ideaId: number;
+  version: number;
+  text: string;
+  left: number;
+  top: number;
+  placement: "above" | "below";
+};
+
+type CardSelectionAttachment = Pick<CardTextSelection, "ideaId" | "version" | "text"> & {
+  mode: CardSelectionMode;
 };
 
 type AttentionTracker = {
@@ -214,16 +228,18 @@ function summarizeJobResult(result: string) {
   return `${clipped.slice(0, lastSpace > 120 ? lastSpace : 177)}…`;
 }
 
-function AgentCard({ idea, actionable, onAction, onInteraction }: { idea: Idea; actionable: boolean; onAction: (action: CardAction) => void; onInteraction: (action: string, label: string) => void }) {
+function AgentCard({ idea, actionable, onAction, onInteraction, onTextSelection }: { idea: Idea; actionable: boolean; onAction: (action: CardAction) => void; onInteraction: (action: string, label: string) => void; onTextSelection?: (selection: CardTextSelection | null) => void }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const renderedCardIdRef = useRef<number | null>(null);
   const onActionRef = useRef(onAction);
   const onInteractionRef = useRef(onInteraction);
+  const onTextSelectionRef = useRef(onTextSelection);
 
   useEffect(() => {
     onActionRef.current = onAction;
     onInteractionRef.current = onInteraction;
-  }, [onAction, onInteraction]);
+    onTextSelectionRef.current = onTextSelection;
+  }, [onAction, onInteraction, onTextSelection]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -232,7 +248,7 @@ function AgentCard({ idea, actionable, onAction, onInteraction }: { idea: Idea; 
     const detailsState = renderedCardIdRef.current === idea.id
       ? new Map(Array.from(root.querySelectorAll("details"), (detail) => [detail.querySelector("summary")?.textContent, detail.open]))
       : new Map();
-    root.innerHTML = `<style>:host{display:block;font-family:inherit}*{box-sizing:border-box}[data-radar-action]{min-height:44px;cursor:pointer}[data-radar-action="open"]{display:inline-flex!important;align-items:center;gap:.38em}[data-radar-action="open"]::after{content:"↗";font-size:.8em;line-height:1;opacity:.68;transform:translateY(-.08em)}</style>${idea.cardHtml}`;
+    root.innerHTML = `<style>:host{display:block;font-family:inherit}*{box-sizing:border-box}::selection{background:#d9dcff;color:inherit}[data-radar-action]{min-height:44px;cursor:pointer}[data-radar-action="open"]{display:inline-flex!important;align-items:center;gap:.38em}[data-radar-action="open"]::after{content:"↗";font-size:.8em;line-height:1;opacity:.68;transform:translateY(-.08em)}</style>${idea.cardHtml}`;
     root.querySelectorAll('[data-radar-action="change"], [data-radar-action="no"]').forEach((button) => button.remove());
     root.querySelectorAll("details").forEach((detail) => {
       const open = detailsState.get(detail.querySelector("summary")?.textContent);
@@ -268,11 +284,50 @@ function AgentCard({ idea, actionable, onAction, onInteraction }: { idea: Idea; 
         url: target.dataset.radarUrl || "",
       });
     };
-    root.addEventListener("click", click);
-    return () => {
-      root.removeEventListener("click", click);
+    let selectionFrame = 0;
+    const captureSelection = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest("[data-radar-action], button, a, input, textarea, summary")) {
+        onTextSelectionRef.current?.(null);
+        return;
+      }
+      window.cancelAnimationFrame(selectionFrame);
+      selectionFrame = window.requestAnimationFrame(() => {
+        const shadowSelection = (root as ShadowRoot & { getSelection?: () => Selection | null }).getSelection?.();
+        const selection = shadowSelection ?? window.getSelection();
+        if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+          onTextSelectionRef.current?.(null);
+          return;
+        }
+        const range = selection.getRangeAt(0);
+        const text = normalizeCardSelection(selection.toString());
+        const rect = range.getBoundingClientRect();
+        if (!text || (!rect.width && !rect.height)) {
+          onTextSelectionRef.current?.(null);
+          return;
+        }
+        const placement = rect.top >= 72 ? "above" : "below";
+        onTextSelectionRef.current?.({
+          ideaId: idea.id,
+          version: idea.version,
+          text,
+          left: window.innerWidth < 560
+            ? window.innerWidth / 2
+            : Math.min(window.innerWidth - 132, Math.max(132, rect.left + rect.width / 2)),
+          top: placement === "above" ? rect.top - 8 : rect.bottom + 8,
+          placement,
+        });
+      });
     };
-  }, [actionable, idea.id, idea.cardHtml, idea.jobOutcome]);
+    root.addEventListener("click", click);
+    root.addEventListener("pointerup", captureSelection);
+    root.addEventListener("keyup", captureSelection);
+    return () => {
+      window.cancelAnimationFrame(selectionFrame);
+      root.removeEventListener("click", click);
+      root.removeEventListener("pointerup", captureSelection);
+      root.removeEventListener("keyup", captureSelection);
+    };
+  }, [actionable, idea.id, idea.version, idea.cardHtml, idea.jobOutcome]);
 
   return (
     <div className="radar-agent-card">
@@ -392,6 +447,9 @@ export function Agency() {
   const [composerError, setComposerError] = useState("");
   const [feedbackDrafts, setFeedbackDrafts] = useState<Record<string, string>>({});
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [selectionMenu, setSelectionMenu] = useState<CardTextSelection | null>(null);
+  const [selectionAttachment, setSelectionAttachment] = useState<CardSelectionAttachment | null>(null);
+  const feedbackRef = useRef<HTMLTextAreaElement>(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [, setLiveDecision] = useState({ key: "", activeMs: 0 });
@@ -402,9 +460,34 @@ export function Agency() {
   const deepLinkHandledRef = useRef(false);
 
   const selectIdea = useCallback((idea: Idea | null) => {
+    const previous = selectedIdeaRef.current;
+    if (previous?.id !== idea?.id || previous?.version !== idea?.version) {
+      setSelectionMenu(null);
+      setSelectionAttachment(null);
+    }
     selectedIdeaRef.current = idea;
     setSelectedIdea(idea);
   }, []);
+
+  useEffect(() => {
+    if (!selectionMenu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest("[data-selection-toolbar]")) return;
+      setSelectionMenu(null);
+    };
+    const dismissOnScroll = () => setSelectionMenu(null);
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectionMenu(null);
+    };
+    document.addEventListener("pointerdown", dismiss, true);
+    window.addEventListener("scroll", dismissOnScroll, true);
+    window.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("scroll", dismissOnScroll, true);
+      window.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [selectionMenu]);
 
   const load = useCallback(async (
     targetView: Idea["status"] = view,
@@ -647,10 +730,37 @@ export function Agency() {
       void sendToAgent(active, payload.action, label, prompt);
   }, [active, recordCardInteraction, sendToAgent]);
 
+  const handleCardTextSelection = useCallback((selection: CardTextSelection | null) => {
+    if (!selection || selection.ideaId !== selectedIdeaRef.current?.id || selection.version !== selectedIdeaRef.current?.version) {
+      setSelectionMenu(null);
+      return;
+    }
+    setSelectionMenu(selection);
+  }, []);
+
+  const attachCardSelection = useCallback((mode: CardSelectionMode) => {
+    const selection = selectionMenu;
+    const target = selectedIdeaRef.current;
+    if (!selection || !target || selection.ideaId !== target.id || selection.version !== target.version) {
+      setSelectionMenu(null);
+      return;
+    }
+    setSelectionAttachment({ ideaId: selection.ideaId, version: selection.version, text: selection.text, mode });
+    setSelectionMenu(null);
+    window.getSelection()?.removeAllRanges();
+    window.requestAnimationFrame(() => feedbackRef.current?.focus());
+  }, [selectionMenu]);
+
   const submitFeedback = useCallback(async () => {
     const note = feedback.trim();
     const target = active;
     if (!target || !note || feedbackSubmitting) return;
+    const attachedSelection = selectionAttachment?.ideaId === target.id && selectionAttachment.version === target.version
+      ? selectionAttachment
+      : null;
+    const selectionSubmission = attachedSelection
+      ? cardSelectionSubmission(attachedSelection.mode, attachedSelection.text, note)
+      : null;
 
     setFeedbackSubmitting(true);
     try {
@@ -658,7 +768,7 @@ export function Agency() {
         const response = await fetch("/api/agent-jobs/addendum", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jobId: activeJob.id, ideaId: target.id, note }),
+          body: JSON.stringify({ jobId: activeJob.id, ideaId: target.id, note: selectionSubmission?.addendum ?? note }),
         });
         if (response.status === 409) {
           await load();
@@ -675,21 +785,25 @@ export function Agency() {
           delete next[targetDraftKey];
           return next;
         });
-        setMessage("Added to the current job. Agency must read it before finishing.");
+        setSelectionAttachment(null);
+        setMessage(attachedSelection?.mode === "task"
+          ? "Agency will split this into its own card while finishing the current job."
+          : "Added to the current job. Agency must read it before finishing.");
         await load(view, { preferred: target });
         return;
       }
-      await sendToAgent(
+      const sent = await sendToAgent(
         target,
         "change",
-        "New context",
-        "",
-        note,
+        selectionSubmission?.label ?? "New context",
+        selectionSubmission?.prompt ?? "",
+        selectionSubmission?.note ?? note,
       );
+      if (sent) setSelectionAttachment(null);
     } finally {
       setFeedbackSubmitting(false);
     }
-  }, [active, activeJob, feedback, feedbackSubmitting, jobInFlight, load, sendToAgent, view]);
+  }, [active, activeJob, feedback, feedbackSubmitting, jobInFlight, load, selectionAttachment, sendToAgent, view]);
 
   const submitImprove = useCallback(async () => {
     if (!active || jobInFlight || feedbackSubmitting) return;
@@ -748,7 +862,7 @@ export function Agency() {
   }, [active, feedbackSubmitting, jobInFlight, load, selectIdea, view, visibleIdeas]);
 
   useEffect(() => {
-    if (!active || composer) return;
+    if (!active || composer || selectionMenu || selectionAttachment) return;
     const shortcut = (event: KeyboardEvent) => {
       if (event.key === "Escape" && composer) {
         event.preventDefault();
@@ -790,7 +904,7 @@ export function Agency() {
     };
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
-  }, [active, composer, move, submitImprove, submitSkip, submitTogglePark]);
+  }, [active, composer, move, selectionAttachment, selectionMenu, submitImprove, submitSkip, submitTogglePark]);
 
 
   async function submitTell() {
@@ -1018,11 +1132,21 @@ export function Agency() {
             </section>
           )}
           <section className="radar-card-host">
-            <AgentCard idea={active} actionable={!jobInFlight} onAction={handleCardAction} onInteraction={(action, label) => recordCardInteraction(active, action, label)} />
+            <AgentCard idea={active} actionable={!jobInFlight} onAction={handleCardAction} onInteraction={(action, label) => recordCardInteraction(active, action, label)} onTextSelection={handleCardTextSelection} />
           </section>
 
-          <section className="radar-inline-change">
+          <section className={`radar-inline-change${selectionAttachment ? " has-selection" : ""}`}>
+            {selectionAttachment && (
+              <div className={`radar-selection-attachment is-${selectionAttachment.mode}`}>
+                <div>
+                  <span>{selectionAttachment.mode === "task" ? "New task from selection" : "Selected text"}</span>
+                  <blockquote>{selectionAttachment.text}</blockquote>
+                </div>
+                <button type="button" aria-label="Remove selected text" onClick={() => setSelectionAttachment(null)}>Remove</button>
+              </div>
+            )}
             <textarea
+              ref={feedbackRef}
               aria-label={jobInFlight ? "Add an instruction to the current job" : "Change this card"}
               value={feedback}
               rows={1}
@@ -1035,9 +1159,13 @@ export function Agency() {
               }}
               placeholder={feedbackSubmitting
                 ? "Adding your instruction…"
-                : jobInFlight
-                  ? "Add another instruction while Agency works…"
-                  : "Add context or say what to change… Enter sends, Shift+Enter adds a line"}
+                : selectionAttachment?.mode === "task"
+                  ? "Add a note for the new task…"
+                  : selectionAttachment?.mode === "chat"
+                    ? "Add a note about this selection…"
+                    : jobInFlight
+                      ? "Add another instruction while Agency works…"
+                      : "Add context or say what to change… Enter sends, Shift+Enter adds a line"}
             />
             <div className="radar-inline-actions">
               <button
@@ -1067,10 +1195,10 @@ export function Agency() {
               <button
                 className="is-send radar-shortcut-hint"
                 disabled={feedbackSubmitting || !feedback.trim()}
-                aria-label={jobInFlight ? "Add instruction" : "Send"}
-                data-shortcut-hint={jobInFlight ? "Add instruction · Enter" : "Send · Enter in feedback"}
+                aria-label={selectionAttachment?.mode === "task" ? "Start new task" : jobInFlight ? "Add instruction" : "Send"}
+                data-shortcut-hint={selectionAttachment?.mode === "task" ? "Start new task · Enter" : jobInFlight ? "Add instruction · Enter" : "Send · Enter in feedback"}
                 onClick={() => void submitFeedback()}
-              >{jobInFlight ? "Add" : "Send"} <kbd>↵</kbd></button>
+              >{selectionAttachment?.mode === "task" ? "Start" : jobInFlight ? "Add" : "Send"} <kbd>↵</kbd></button>
             </div>
           </section>
 
@@ -1095,6 +1223,20 @@ export function Agency() {
         </section>
       ) : (
         <section className="radar-empty"><strong>{view === "new" ? "You are caught up." : view === "working" ? "No agents working." : view === "parked" ? "Nothing parked." : "Nothing done yet."}</strong></section>
+      )}
+
+      {selectionMenu && (
+        <div
+          className={`radar-selection-toolbar is-${selectionMenu.placement}`}
+          data-selection-toolbar
+          role="toolbar"
+          aria-label="Actions for selected card text"
+          style={{ left: selectionMenu.left, top: selectionMenu.top }}
+          onMouseDown={(event) => event.preventDefault()}
+        >
+          <button type="button" disabled={feedbackSubmitting} onClick={() => attachCardSelection("chat")}>Add to chat</button>
+          <button type="button" disabled={feedbackSubmitting} onClick={() => attachCardSelection("task")}>Start new task</button>
+        </div>
       )}
 
       {!composer && message && <div className="radar-message" role="status">{message}</div>}
