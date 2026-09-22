@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// me.md and the app's "My dream" are one document. This keeps them identical: whichever
+// me.md and the app's combined context are one document. This keeps them identical: whichever
 // side changed last wins. Run it at the start and the end of every Agency wave.
 //
 //   node scripts/sync-me.mjs          # sync, newest wins
@@ -33,7 +33,7 @@ async function writeApp(text) {
   const response = await fetch(`${RADAR}/api/context`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-radar-local-agent": "1" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ text, replaceAll: true }),
   });
   if (!response.ok) throw new Error(`context ${response.status}: ${await response.text()}`);
 }
@@ -46,8 +46,8 @@ const [file, app] = await Promise.all([
   readApp(),
 ]);
 
-if (file.missing && mode === "--pull") throw new Error(`Profile does not exist: ${ME}. Create the file first, or use --app-to-file for an existing app dream.`);
-if (file.missing && !app.text.trim()) throw new Error("No profile yet. Let the agent create me.md from relevant context, or add your dream in Settings.");
+if (file.missing && mode === "--pull") throw new Error(`Profile does not exist: ${ME}. Create the file first, or use --app-to-file for existing app context.`);
+if (file.missing && !app.text.trim()) throw new Error("No profile yet. Let the agent create me.md from relevant context, or add context in Settings.");
 if (!file.missing && file.text.trim() === app.text.trim()) {
   console.log("in sync");
   process.exit(0);

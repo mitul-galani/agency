@@ -29,6 +29,8 @@ export async function ensureDatabase() {
 async function runMaintenance(db: ReturnType<typeof getD1>) {
   await db.batch([
     db.prepare("CREATE TABLE IF NOT EXISTS contexts (id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS context_items (id TEXT PRIMARY KEY, text TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE TABLE IF NOT EXISTS ideas (id INTEGER PRIMARY KEY AUTOINCREMENT, headline TEXT NOT NULL, why_matters TEXT NOT NULL, impact TEXT NOT NULL, finished_work TEXT NOT NULL, primary_action TEXT NOT NULL, external_action TEXT NOT NULL, score INTEGER NOT NULL, rise_reach INTEGER NOT NULL DEFAULT 0, rise_impact INTEGER NOT NULL DEFAULT 0, rise_strategic_fit INTEGER NOT NULL DEFAULT 0, rise_ease INTEGER NOT NULL DEFAULT 0, decision_estimate_ms INTEGER NOT NULL DEFAULT 0, decision_estimate_reason TEXT NOT NULL DEFAULT '', version INTEGER NOT NULL DEFAULT 1, source_label TEXT NOT NULL, source_url TEXT NOT NULL, agent_name TEXT NOT NULL, preview_kind TEXT NOT NULL, preview_title TEXT NOT NULL, preview_body TEXT NOT NULL, preview_asset TEXT NOT NULL DEFAULT '', dedupe_key TEXT NOT NULL UNIQUE, status TEXT NOT NULL DEFAULT 'new', parked_at TEXT, parked_until TEXT, parked_note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE TABLE IF NOT EXISTS feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, decision TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE TABLE IF NOT EXISTS agent_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, action TEXT NOT NULL, button_label TEXT NOT NULL, instruction TEXT NOT NULL DEFAULT '', user_feedback TEXT NOT NULL DEFAULT '', feedback_revision INTEGER NOT NULL DEFAULT 0, card_context TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', result TEXT NOT NULL DEFAULT '', ticket_outcome TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
@@ -38,6 +40,8 @@ async function runMaintenance(db: ReturnType<typeof getD1>) {
     db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_ideas_dedupe_key ON ideas(dedupe_key)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_ideas_status_score ON ideas(status, score DESC)"),
     db.prepare("CREATE TABLE IF NOT EXISTS topics (id TEXT PRIMARY KEY, label TEXT NOT NULL, hint TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("INSERT INTO context_items (id, text, position) SELECT 'legacy-context', text, 0 FROM contexts WHERE id = (SELECT MAX(id) FROM contexts) AND trim(text) != '' AND NOT EXISTS (SELECT 1 FROM context_items) AND NOT EXISTS (SELECT 1 FROM app_meta WHERE key = 'context_items_migrated')"),
+    db.prepare("INSERT OR IGNORE INTO app_meta (key, value) VALUES ('context_items_migrated', '1')"),
   ]);
   const columns = await db.prepare("PRAGMA table_info(ideas)").all<{ name: string }>();
   const names = new Set(columns.results.map((column: { name: string }) => column.name));

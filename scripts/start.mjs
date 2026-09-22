@@ -16,25 +16,31 @@ const agencyUrl = process.env.RADAR_URL || "http://localhost:3100";
 const startupTimeoutMs = Number(process.env.AGENCY_STARTUP_TIMEOUT_MS || 90_000);
 
 let server = null;
+let claude = null;
 let stopping = false;
 
-function stop() {
+function stop(signal = "SIGTERM") {
   if (stopping) return;
   stopping = true;
   // Only our own child; an already-running server belongs to whoever started it.
   if (server && server.exitCode === null) server.kill("SIGTERM");
+  if (claude && claude.exitCode === null) claude.kill(signal);
 }
 
-async function reachable() {
+async function readState() {
   try {
     const response = await fetch(`${agencyUrl}/api/state?light=1`, {
       headers: { "x-radar-local-agent": "1" },
       signal: AbortSignal.timeout(2500),
     });
-    return response.ok;
+    return response.ok ? await response.json() : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+async function reachable() {
+  return Boolean(await readState());
 }
 
 // Check Claude before starting a server we would only have to tear down again.
@@ -56,7 +62,7 @@ if (await reachable()) {
   console.log(`Starting Agency at ${agencyUrl} ...`);
   server = spawn("npm", ["run", "dev"], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
   server.on("exit", (code) => {
-    if (!stopping && code !== 0) {
+    if (!stopping) {
       console.error(`Agency stopped on its own (exit ${code}). Run "npm run dev" to see why.`);
       process.exit(code ?? 1);
     }
@@ -82,11 +88,22 @@ if (await reachable()) {
   console.log(`Agency is up. Open ${agencyUrl} to watch the cards arrive.`);
 }
 
-process.on("SIGINT", stop);
-process.on("SIGTERM", stop);
+process.on("SIGINT", () => stop("SIGINT"));
+process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("exit", stop);
 
-const claude = spawn("node", [resolve(root, "scripts/start-claude.mjs")], {
+let state = await readState();
+if (!state?.context?.text?.trim()) {
+  console.log(`Open ${agencyUrl} and add your first Context note. Claude will start as soon as it is saved.`);
+  while (!stopping && !state?.context?.text?.trim()) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    state = await readState();
+  }
+  if (stopping) process.exit(1);
+  console.log("Context saved. Starting Claude.");
+}
+
+claude = spawn("node", [resolve(root, "scripts/start-claude.mjs")], {
   cwd: root,
   stdio: "inherit",
 });
