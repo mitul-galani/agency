@@ -15,6 +15,8 @@ Use subagents whenever supported for discovery, preparation and review. Give eac
 
 For every discovery pass, record the real lifecycle through `POST /api/discovery-status` using `x-radar-local-agent: 1`: send `start` with a unique run ID before source checks, then `complete` or `failed` with that same ID after the pass. Include the recurring schedule on `start` when configured. This powers the user's last run, next run, and running-now status in Agency.
 
+Claude scheduled tasks are session-only. If the approved cadence has an idle gap long enough for Claude to retire the coordinator, create a keepalive-only schedule within that same session. A keepalive may call `CronList` to confirm the expected tasks, but it must not read discovery sources, create cards, process jobs, call the status API, or change schedules.
+
 ## Learn without interviewing
 
 - Discover enabled tools, installed CLIs and recent commands. Check bundled services. Verify accounts and read relevant mail, Slack, meetings, repositories or analytics. Distinguish failed access from untried sources.

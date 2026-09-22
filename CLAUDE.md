@@ -25,4 +25,5 @@ Agency is a local, single-user operating layer. The web app stores the user's pr
 - Follow the approval policy before sending messages, publishing, spending, changing access, merging, or deploying.
 - Keep credentials, personal profiles, cards, databases, source exports, and generated private artifacts out of git.
 - Do not create a recurring schedule until the user explicitly chooses a cadence. If they do, keep one coordinator responsible for discovery and a separate coordinator for executing queued work.
+- Claude scheduled tasks are session-only. When a chosen discovery cadence leaves an idle gap long enough for Claude to retire the session, add a keepalive-only schedule inside the discovery coordinator. It may verify schedules but must not inspect sources, create cards, process jobs, or report a discovery run.
 - Keep Claude on the model selected by the launcher. Do not spawn subagents unless the user asks.

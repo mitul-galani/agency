@@ -72,6 +72,8 @@ Granola discovery scans the full current day and deduplicates individual actions
 
 Claude scheduled tasks are attached to the Claude session that created them. Keep that session running. If it exits, restart the coordinator and recreate the schedule.
 
+If the discovery window leaves the Claude session idle long enough to be retired, add a lightweight keepalive inside the same session. A keepalive only verifies the schedules. It does not inspect sources or create cards.
+
 The sidebar shows the last finished discovery pass, the next scheduled pass, and a live running state. Discovery coordinators report that lifecycle through the local `/api/discovery-status` route, so the indicator reflects the runner rather than guessing from card activity.
 
 ## Privacy and safety
