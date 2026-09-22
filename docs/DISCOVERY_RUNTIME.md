@@ -21,21 +21,7 @@ The launcher uses Claude Opus through the existing Claude Code login. It does no
 
 The keepalive never reads sources or creates cards. It only confirms that both schedules remain attached to the session.
 
-## Pinning a known-good Claude version
-
-If a Claude Code update breaks scheduled wakeups, launch an installed version directly and disable its auto-updater for this process:
-
-```sh
-AGENCY_CLAUDE_VERSION=2.1.278 npm run agency:discovery
-```
-
-The launcher resolves that to `~/.local/share/claude/versions/2.1.278`. You can instead provide an explicit executable:
-
-```sh
-AGENCY_CLAUDE_BIN=/absolute/path/to/claude npm run agency:discovery
-```
-
-Pinning affects only this discovery process. Other Claude sessions continue using the normal installed version. Remove the pin after scheduled wakeups are confirmed on a newer release.
+The launcher always uses the current `claude` executable on the user's path. Reliability comes from keeping one dedicated foreground coordinator alive, not from pinning a Claude Code version.
 
 ## Changing the cadence
 

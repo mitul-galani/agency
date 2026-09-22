@@ -74,7 +74,7 @@ Claude scheduled tasks are attached to the Claude session that created them. Kee
 
 If the discovery window leaves the Claude session idle long enough to be retired, add a lightweight keepalive inside the same session. A keepalive only verifies the schedules. It does not inspect sources or create cards.
 
-For a dedicated discovery coordinator, including cadence configuration and temporarily pinning a known-good Claude Code version, see [Discovery runtime](docs/DISCOVERY_RUNTIME.md).
+For a dedicated discovery coordinator and cadence configuration, see [Discovery runtime](docs/DISCOVERY_RUNTIME.md).
 
 The sidebar shows the last finished discovery pass, the next scheduled pass, and a live running state. Discovery coordinators report that lifecycle through the local `/api/discovery-status` route, so the indicator reflects the runner rather than guessing from card activity.
 

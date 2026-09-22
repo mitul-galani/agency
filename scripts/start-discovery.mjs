@@ -1,7 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -9,26 +7,10 @@ const agencyUrl = process.env.RADAR_URL || "http://localhost:3100";
 const model = process.env.AGENCY_CLAUDE_MODEL || "opus";
 const discoveryCron = process.env.AGENCY_DISCOVERY_CRON || "6,36 9-20 * * *";
 const keepaliveCron = process.env.AGENCY_KEEPALIVE_CRON || "6 0,3,6 * * *";
-const requestedVersion = process.env.AGENCY_CLAUDE_VERSION;
-const explicitBinary = process.env.AGENCY_CLAUDE_BIN;
-const claudeBinary = explicitBinary || (requestedVersion
-  ? join(homedir(), ".local", "share", "claude", "versions", requestedVersion)
-  : "claude");
-
-if ((explicitBinary || requestedVersion) && !existsSync(claudeBinary)) {
-  console.error(`Claude binary not found at ${claudeBinary}.`);
-  console.error("Install that Claude Code version or unset AGENCY_CLAUDE_VERSION/AGENCY_CLAUDE_BIN.");
-  process.exit(1);
-}
-
-const claudeEnvironment = {
-  ...process.env,
-  ...(requestedVersion || explicitBinary ? { DISABLE_AUTOUPDATER: "1" } : {}),
-};
+const claudeBinary = "claude";
 
 const version = spawnSync(claudeBinary, ["--version"], {
   encoding: "utf8",
-  env: claudeEnvironment,
 });
 if (version.error?.code === "ENOENT") {
   console.error("Claude Code is not installed. Install it, sign in, then run this command again.");
@@ -73,7 +55,6 @@ const result = spawnSync(claudeBinary, [
   prompt,
 ], {
   cwd: root,
-  env: claudeEnvironment,
   stdio: "inherit",
 });
 
