@@ -12,7 +12,7 @@ That is the only command. The launcher:
 
 1. Checks that Claude Code is installed and moves itself into a detached tmux session named `agency-discovery`, so closing the terminal does not end discovery.
 2. Starts the Agency app in a second tmux window if nothing answers at `RADAR_URL` (default `http://localhost:3100`).
-3. Starts Claude Opus with a fixed session ID, runs one discovery pass, and creates two session crons:
+3. Starts Claude Opus 5.5 (`AGENCY_CLAUDE_MODEL` overrides it) with a fixed session ID, runs one discovery pass, and creates two session crons:
    - discovery at `6,36 9-20 * * *`, every 30 minutes from 9:06 AM through 8:36 PM local time
    - a check-only keepalive at `6 0,3,6 * * *`, which only confirms both schedules still exist
 4. Supervises Claude. If the process exits for any reason it is relaunched with `--resume` on the same session ID, so the conversation continues. The resume prompt recreates both crons and runs a catch-up pass only if the last one is more than 40 minutes old. Repeated crashes back off up to five minutes; three failed resumes in a row start a fresh session.

@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const agencyUrl = process.env.RADAR_URL || "http://localhost:3100";
-const model = process.env.AGENCY_CLAUDE_MODEL || "opus";
+const model = process.env.AGENCY_CLAUDE_MODEL || "claude-opus-5-5";
 
 const version = spawnSync("claude", ["--version"], { encoding: "utf8" });
 if (version.error?.code === "ENOENT") {
