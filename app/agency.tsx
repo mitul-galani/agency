@@ -109,7 +109,7 @@ const emptyState: RadarState = {
   ideas: [],
   laneCounts: { new: 0, working: 0, parked: 0, done: 0 },
   jobs: { queued: 0, running: 0 },
-  discovery: { state: "idle", startedAt: null, lastFinishedAt: null, lastResult: "", nextRunAt: null, schedule: null },
+  discovery: { state: "idle", startedAt: null, lastFinishedAt: null, lastResult: "", nextRunAt: null, missedRunAt: null, schedule: null },
   completionStats: { verified: 0, legacy: 0, reviewReady: 0, dismissed: 0, points: 0, pointsToday: 0, verifiedToday: 0 },
   decisionMetrics: {
     tracked: 0,
@@ -164,21 +164,27 @@ function formatDiscoveryTime(value: string | null) {
 
 function DiscoveryRunStatus({ discovery }: { discovery: DiscoveryStatus }) {
   const running = discovery.state === "running";
+  const missed = discovery.state === "stale" && Boolean(discovery.missedRunAt);
   const label = running
     ? "Running now"
     : discovery.state === "failed"
       ? "Last run failed"
-      : discovery.state === "stale"
-        ? "Run status unclear"
-        : discovery.schedule
-          ? "Scheduled"
-          : "Not scheduled";
+      : missed
+        ? "Missed a run, coordinator may be down"
+        : discovery.state === "stale"
+          ? "Run status unclear"
+          : discovery.schedule
+            ? "Scheduled"
+            : "Not scheduled";
+  const showStarted = running || (discovery.state === "stale" && !missed);
   return (
     <section className={`radar-discovery-status is-${discovery.state}`} aria-label={`Discovery: ${label}`} aria-live="polite">
       <header><i aria-hidden="true" /><strong>Discovery</strong><span>{label}</span></header>
       <dl>
-        <div><dt>{running || discovery.state === "stale" ? "Started" : "Last"}</dt><dd>{formatDiscoveryTime(running || discovery.state === "stale" ? discovery.startedAt : discovery.lastFinishedAt)}</dd></div>
-        <div><dt>Next</dt><dd>{discovery.nextRunAt ? formatDiscoveryTime(discovery.nextRunAt) : "No recurring run"}</dd></div>
+        <div><dt>{showStarted ? "Started" : "Last"}</dt><dd>{formatDiscoveryTime(showStarted ? discovery.startedAt : discovery.lastFinishedAt)}</dd></div>
+        {missed
+          ? <div><dt>Missed</dt><dd>{formatDiscoveryTime(discovery.missedRunAt)}</dd></div>
+          : <div><dt>Next</dt><dd>{discovery.nextRunAt ? formatDiscoveryTime(discovery.nextRunAt) : "No recurring run"}</dd></div>}
       </dl>
     </section>
   );

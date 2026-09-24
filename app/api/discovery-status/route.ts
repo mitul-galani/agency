@@ -3,6 +3,8 @@ import {
   DISCOVERY_STATUS_SELECT,
   isValidDiscoverySchedule,
   presentDiscoveryStatus,
+  scheduleMinutes,
+  serializeScheduleMinutes,
   type DiscoverySchedule,
   type DiscoveryStatusRow,
 } from "../../../lib/discovery-status";
@@ -46,20 +48,22 @@ export async function POST(request: Request) {
   if (!at) return Response.json({ error: "Invalid discovery timestamp" }, { status: 400 });
   const db = await ensureDatabase();
   const schedule = payload.schedule;
+  const minutes = schedule ? scheduleMinutes(schedule)! : null;
 
   if (payload.event === "configure") {
     if (!schedule) return Response.json({ error: "A schedule is required" }, { status: 400 });
     await db.prepare(`
       INSERT INTO discovery_status (
-        id, state, schedule_minute, schedule_start_hour, schedule_end_hour, schedule_time_zone, updated_at
-      ) VALUES (1, 'idle', ?, ?, ?, ?, ?)
+        id, state, schedule_minute, schedule_minutes, schedule_start_hour, schedule_end_hour, schedule_time_zone, updated_at
+      ) VALUES (1, 'idle', ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         schedule_minute = excluded.schedule_minute,
+        schedule_minutes = excluded.schedule_minutes,
         schedule_start_hour = excluded.schedule_start_hour,
         schedule_end_hour = excluded.schedule_end_hour,
         schedule_time_zone = excluded.schedule_time_zone,
         updated_at = excluded.updated_at
-    `).bind(schedule.minute, schedule.startHour, schedule.endHour, schedule.timeZone, at).run();
+    `).bind(minutes![0], serializeScheduleMinutes(minutes!), schedule.startHour, schedule.endHour, schedule.timeZone, at).run();
     return Response.json(await currentStatus(db));
   }
 
@@ -69,14 +73,15 @@ export async function POST(request: Request) {
   if (payload.event === "start") {
     await db.prepare(`
       INSERT INTO discovery_status (
-        id, state, run_id, started_at, schedule_minute, schedule_start_hour,
+        id, state, run_id, started_at, schedule_minute, schedule_minutes, schedule_start_hour,
         schedule_end_hour, schedule_time_zone, updated_at
-      ) VALUES (1, 'running', ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (1, 'running', ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         state = 'running',
         run_id = excluded.run_id,
         started_at = excluded.started_at,
         schedule_minute = COALESCE(excluded.schedule_minute, discovery_status.schedule_minute),
+        schedule_minutes = COALESCE(excluded.schedule_minutes, discovery_status.schedule_minutes),
         schedule_start_hour = COALESCE(excluded.schedule_start_hour, discovery_status.schedule_start_hour),
         schedule_end_hour = COALESCE(excluded.schedule_end_hour, discovery_status.schedule_end_hour),
         schedule_time_zone = COALESCE(excluded.schedule_time_zone, discovery_status.schedule_time_zone),
@@ -84,7 +89,8 @@ export async function POST(request: Request) {
     `).bind(
       runId,
       at,
-      schedule?.minute ?? null,
+      minutes ? minutes[0] : null,
+      minutes ? serializeScheduleMinutes(minutes) : null,
       schedule?.startHour ?? null,
       schedule?.endHour ?? null,
       schedule?.timeZone ?? null,

@@ -37,3 +37,5 @@
 /public/media/
 /public/screenshots/
 /public/videos/
+/discovery-runtime.json
+/discovery-supervisor.log

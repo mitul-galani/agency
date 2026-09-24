@@ -36,7 +36,7 @@ async function runMaintenance(db: ReturnType<typeof getD1>) {
     db.prepare("CREATE TABLE IF NOT EXISTS agent_jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, action TEXT NOT NULL, button_label TEXT NOT NULL, instruction TEXT NOT NULL DEFAULT '', user_feedback TEXT NOT NULL DEFAULT '', feedback_revision INTEGER NOT NULL DEFAULT 0, card_context TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'queued', result TEXT NOT NULL DEFAULT '', ticket_outcome TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE TABLE IF NOT EXISTS card_attention (idea_id INTEGER NOT NULL, idea_version INTEGER NOT NULL, first_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, last_seen_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, active_ms INTEGER NOT NULL DEFAULT 0, view_count INTEGER NOT NULL DEFAULT 0, decision_action TEXT, decision_label TEXT NOT NULL DEFAULT '', decision_source TEXT NOT NULL DEFAULT 'user', decided_at TEXT, wall_ms INTEGER, PRIMARY KEY (idea_id, idea_version))"),
     db.prepare("CREATE TABLE IF NOT EXISTS card_interactions (id INTEGER PRIMARY KEY AUTOINCREMENT, idea_id INTEGER NOT NULL, idea_version INTEGER NOT NULL, action TEXT NOT NULL, label TEXT NOT NULL DEFAULT '', active_ms INTEGER NOT NULL DEFAULT 0, wall_ms INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
-    db.prepare("CREATE TABLE IF NOT EXISTS discovery_status (id INTEGER PRIMARY KEY, state TEXT NOT NULL DEFAULT 'idle', run_id TEXT NOT NULL DEFAULT '', started_at TEXT, last_finished_at TEXT, last_result TEXT NOT NULL DEFAULT '', schedule_minute INTEGER, schedule_start_hour INTEGER, schedule_end_hour INTEGER, schedule_time_zone TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
+    db.prepare("CREATE TABLE IF NOT EXISTS discovery_status (id INTEGER PRIMARY KEY, state TEXT NOT NULL DEFAULT 'idle', run_id TEXT NOT NULL DEFAULT '', started_at TEXT, last_finished_at TEXT, last_result TEXT NOT NULL DEFAULT '', schedule_minute INTEGER, schedule_minutes TEXT, schedule_start_hour INTEGER, schedule_end_hour INTEGER, schedule_time_zone TEXT, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
     db.prepare("CREATE UNIQUE INDEX IF NOT EXISTS idx_ideas_dedupe_key ON ideas(dedupe_key)"),
     db.prepare("CREATE INDEX IF NOT EXISTS idx_ideas_status_score ON ideas(status, score DESC)"),
     db.prepare("CREATE TABLE IF NOT EXISTS topics (id TEXT PRIMARY KEY, label TEXT NOT NULL, hint TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"),
@@ -77,6 +77,10 @@ async function runMaintenance(db: ReturnType<typeof getD1>) {
   }
   if (!names.has("parked_note")) {
     await db.prepare("ALTER TABLE ideas ADD COLUMN parked_note TEXT NOT NULL DEFAULT ''").run();
+  }
+  const statusColumns = await db.prepare("PRAGMA table_info(discovery_status)").all<{ name: string }>();
+  if (!statusColumns.results.some((column: { name: string }) => column.name === "schedule_minutes")) {
+    await db.prepare("ALTER TABLE discovery_status ADD COLUMN schedule_minutes TEXT").run();
   }
   const riseColumns = [
     ["rise_reach", "ALTER TABLE ideas ADD COLUMN rise_reach INTEGER NOT NULL DEFAULT 0"],
