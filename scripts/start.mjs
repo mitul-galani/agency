@@ -60,7 +60,9 @@ if (await reachable()) {
   console.log(`Agency is already running at ${agencyUrl}.`);
 } else {
   console.log(`Starting Agency at ${agencyUrl} ...`);
-  server = spawn("npm", ["run", "dev"], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
+  // Vite picks its own port unless told; the agent and the docs expect RADAR_URL's.
+  const port = new URL(agencyUrl).port || "3100";
+  server = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", port], { cwd: root, stdio: ["ignore", "ignore", "inherit"] });
   server.on("exit", (code) => {
     if (!stopping) {
       console.error(`Agency stopped on its own (exit ${code}). Run "npm run dev" to see why.`);

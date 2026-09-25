@@ -39,6 +39,7 @@ const discoveryDir = resolve(process.env.AGENCY_DISCOVERY_DIR || root);
 const tmuxSession = process.env.AGENCY_TMUX_SESSION || "agency-discovery";
 const useTmux = process.env.AGENCY_NO_TMUX !== "1";
 const startApp = process.env.AGENCY_START_APP !== "0";
+const agencyPort = new URL(agencyUrl).port || "3100";
 const runtimePath = resolve(discoveryDir, "discovery-runtime.json");
 const logPath = resolve(discoveryDir, "discovery-supervisor.log");
 const claudeBinary = "claude";
@@ -188,7 +189,7 @@ async function ensureApp() {
       log("Starting the Agency app in a second tmux window.");
       spawnSync("tmux", [
         "new-window", "-d", "-t", tmuxSession, "-n", "app", "-c", root,
-        "while true; do npm run dev; echo 'Agency app exited; restarting in 5s'; sleep 5; done",
+        `while true; do npm run dev -- --host 127.0.0.1 --port ${agencyPort}; echo 'Agency app exited; restarting in 5s'; sleep 5; done`,
       ]);
     }
   } else {
