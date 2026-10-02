@@ -56,3 +56,13 @@ Stop the running session first (`npm run agency:discovery:stop`); the launcher w
 ## Status in the app
 
 The sidebar reads `/api/discovery-status`. It shows the last finished pass, the next scheduled one, and a live running state. If a scheduled minute passes by more than 20 minutes with no `start`, the indicator turns stale and names the missed run, so a dead coordinator is visible within one tick instead of promising a next run forever.
+
+## Chats as a source
+
+`scripts/chat-activity.mjs` digests the user's recent Claude Code and Codex conversations from `~/.claude/projects` and `~/.codex/sessions`, so discovery can pick up decisions and unfinished asks made in those chats. It is read-only and prints only the user's messages and the assistant's replies for a window:
+
+```sh
+node scripts/chat-activity.mjs --since 2026-10-02T12:00:00Z --text
+```
+
+It leaves out tool calls and results, Agency's own coordinator sessions, scheduled-task turns, headless pipeline runs, Codex's internal review threads and automations, and anything that looks like a credential. `--exclude <regex>` widens the session-name exclusions; `--max-messages` and `--max-chars` bound the output.
