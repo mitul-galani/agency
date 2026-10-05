@@ -16,7 +16,8 @@ That is the only command. The launcher:
    - discovery at `6,36 9-20 * * *`, every 30 minutes from 9:06 AM through 8:36 PM local time
    - a check-only keepalive at `6 0,3,6 * * *`, which only confirms both schedules still exist
 4. Supervises Claude. If the process exits for any reason it is relaunched with `--resume` on the same session ID, so the conversation continues. The resume prompt recreates both crons and runs a catch-up pass only if the last one is more than 40 minutes old. Repeated crashes back off up to five minutes; three failed resumes in a row start a fresh session.
-5. The discovery cron renews itself. Session crons expire after seven days; the scheduled prompt re-creates both tasks once they are five days old and records the new IDs in `discovery-state.json`.
+5. Restarts the coordinator on request. If a connector drops out of the long-running session, the coordinator creates `discovery-restart-requested`; the supervisor sees it within 30 seconds, stops Claude, and resumes the same session with every connector started fresh.
+6. The discovery cron renews itself. Session crons expire after seven days; the scheduled prompt re-creates both tasks once they are five days old and records the new IDs in `discovery-state.json`.
 
 Running the command again while it is up just tells you it is running.
 

@@ -18,7 +18,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -42,6 +42,10 @@ const startApp = process.env.AGENCY_START_APP !== "0";
 const agencyPort = new URL(agencyUrl).port || "3100";
 const runtimePath = resolve(discoveryDir, "discovery-runtime.json");
 const logPath = resolve(discoveryDir, "discovery-supervisor.log");
+// The coordinator creates this file to ask for a restart (see CLAUDE.md). A
+// long-running session never reconnects an MCP server that dropped; a resumed
+// one starts them all fresh.
+const restartRequestPath = resolve(discoveryDir, "discovery-restart-requested");
 const claudeBinary = "claude";
 
 function log(message) {
@@ -240,7 +244,15 @@ function launchArgs(runtime) {
 function runClaude(args) {
   return new Promise((done) => {
     const startedAt = Date.now();
+    rmSync(restartRequestPath, { force: true });
     child = spawn(claudeBinary, args, { cwd: discoveryDir, stdio: "inherit", env: process.env });
+    const watch = setInterval(() => {
+      if (!existsSync(restartRequestPath) || !child || child.exitCode !== null) return;
+      rmSync(restartRequestPath, { force: true });
+      log("Coordinator requested a restart; resuming it with fresh connections.");
+      child.kill("SIGTERM");
+    }, 30_000);
+    child.on("exit", () => clearInterval(watch));
     child.on("error", (error) => {
       log(`Could not start Claude: ${error.message}`);
       done({ exitCode: -1, signal: null, durationMs: Date.now() - startedAt });

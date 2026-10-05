@@ -39,3 +39,4 @@
 /public/videos/
 /discovery-runtime.json
 /discovery-supervisor.log
+/discovery-restart-requested
