@@ -180,6 +180,23 @@ process.on("SIGINT", () => stop("SIGINT"));
 process.on("SIGTERM", () => stop("SIGTERM"));
 process.on("SIGHUP", () => stop("SIGHUP"));
 
+// The dev server can die on an uncaught error from the Cloudflare tooling. Two
+// things keep that from compounding: its dev registry lives outside the
+// repository (the heartbeat on those files is what has crashed it), and any
+// workerd the dead server left behind is reaped before the next start, so
+// stale processes never share the local database with the new one.
+function appLoopCommand() {
+  const registry = "$HOME/.cache/agency/wrangler-registry";
+  const orphans = JSON.stringify(`${root}/node_modules/@cloudflare/workerd`);
+  return [
+    "while true; do",
+    `MINIFLARE_REGISTRY_PATH="${registry}" npm run dev -- --host 127.0.0.1 --port ${agencyPort};`,
+    `echo "Agency app exited at $(date); restarting in 5s";`,
+    `pkill -P 1 -f ${orphans};`,
+    "sleep 5; done",
+  ].join(" ");
+}
+
 async function ensureApp() {
   if (await appReachable()) return;
   log(`Agency is not reachable at ${agencyUrl}.`);
@@ -189,7 +206,7 @@ async function ensureApp() {
       log("Starting the Agency app in a second tmux window.");
       spawnSync("tmux", [
         "new-window", "-d", "-t", tmuxSession, "-n", "app", "-c", root,
-        `while true; do npm run dev -- --host 127.0.0.1 --port ${agencyPort}; echo 'Agency app exited; restarting in 5s'; sleep 5; done`,
+        appLoopCommand(),
       ]);
     }
   } else {
