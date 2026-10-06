@@ -17,7 +17,8 @@ That is the only command. The launcher:
    - a check-only keepalive at `6 0,3,6 * * *`, which only confirms both schedules still exist
 4. Supervises Claude. If the process exits for any reason it is relaunched with `--resume` on the same session ID, so the conversation continues. The resume prompt recreates both crons and runs a catch-up pass only if the last one is more than 40 minutes old. Repeated crashes back off up to five minutes; three failed resumes in a row start a fresh session.
 5. Restarts the coordinator on request. If a connector drops out of the long-running session, the coordinator creates `discovery-restart-requested`; the supervisor sees it within 30 seconds, stops Claude, and resumes the same session with every connector started fresh.
-6. The discovery cron renews itself. Session crons expire after seven days; the scheduled prompt re-creates both tasks once they are five days old and records the new IDs in `discovery-state.json`.
+6. Wakes the execution coordinator when a job is queued. A `wake` tmux window runs `scripts/wake-on-jobs.mjs`, which polls the queue every 10 seconds and, on a new job, sends the coordinator a cross-session message through a short headless Claude run (about 7 seconds, `AGENCY_NUDGE_MODEL`, default `sonnet`). The coordinator processes the queue on receipt instead of waiting for its next scheduled tick. `AGENCY_WAKE_ON_JOBS=0` turns it off; `AGENCY_EXECUTION_SESSION` is the regex that finds the coordinator by session name (default `personal agency`).
+7. The discovery cron renews itself. Session crons expire after seven days; the scheduled prompt re-creates both tasks once they are five days old and records the new IDs in `discovery-state.json`.
 
 Running the command again while it is up just tells you it is running.
 

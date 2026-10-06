@@ -46,7 +46,7 @@ mkdirSync(logDir, { recursive: true });
 const env = {
   AGENCY_DISCOVERY_DIR: discoveryDir,
   ...Object.fromEntries(
-    ["RADAR_URL", "AGENCY_CLAUDE_MODEL", "AGENCY_DISCOVERY_CRON", "AGENCY_KEEPALIVE_CRON", "AGENCY_START_APP"]
+    ["RADAR_URL", "AGENCY_CLAUDE_MODEL", "AGENCY_DISCOVERY_CRON", "AGENCY_KEEPALIVE_CRON", "AGENCY_START_APP", "AGENCY_WAKE_ON_JOBS", "AGENCY_EXECUTION_SESSION", "AGENCY_NUDGE_MODEL"]
       .filter((name) => process.env[name])
       .map((name) => [name, process.env[name]]),
   ),

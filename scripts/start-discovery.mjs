@@ -39,6 +39,8 @@ const discoveryDir = resolve(process.env.AGENCY_DISCOVERY_DIR || root);
 const tmuxSession = process.env.AGENCY_TMUX_SESSION || "agency-discovery";
 const useTmux = process.env.AGENCY_NO_TMUX !== "1";
 const startApp = process.env.AGENCY_START_APP !== "0";
+// Wake the execution coordinator when a job is queued (scripts/wake-on-jobs.mjs).
+const wakeOnJobs = process.env.AGENCY_WAKE_ON_JOBS !== "0";
 const agencyPort = new URL(agencyUrl).port || "3100";
 const runtimePath = resolve(discoveryDir, "discovery-runtime.json");
 const logPath = resolve(discoveryDir, "discovery-supervisor.log");
@@ -138,7 +140,7 @@ if (useTmux && !process.env.TMUX) {
     console.log(`Watch it with: tmux attach -t ${tmuxSession}`);
     process.exit(0);
   }
-  const passthrough = ["RADAR_URL", "AGENCY_CLAUDE_MODEL", "AGENCY_DISCOVERY_CRON", "AGENCY_KEEPALIVE_CRON", "AGENCY_START_APP"]
+  const passthrough = ["RADAR_URL", "AGENCY_CLAUDE_MODEL", "AGENCY_DISCOVERY_CRON", "AGENCY_KEEPALIVE_CRON", "AGENCY_START_APP", "AGENCY_WAKE_ON_JOBS", "AGENCY_EXECUTION_SESSION", "AGENCY_NUDGE_MODEL"]
     .filter((name) => process.env[name])
     .flatMap((name) => ["-e", `${name}=${process.env[name]}`]);
   const started = spawnSync("tmux", [
@@ -201,12 +203,26 @@ function appLoopCommand() {
   ].join(" ");
 }
 
+function tmuxWindows() {
+  const listed = spawnSync("tmux", ["list-windows", "-t", tmuxSession, "-F", "#{window_name}"], { encoding: "utf8" });
+  return (listed.stdout || "").split("\n");
+}
+
+function ensureWakeWatcher() {
+  if (!wakeOnJobs || !process.env.TMUX || tmuxWindows().includes("wake")) return;
+  log("Starting the job wake watcher in a tmux window.");
+  spawnSync("tmux", [
+    "new-window", "-d", "-t", tmuxSession, "-n", "wake", "-c", root,
+    `while true; do ${JSON.stringify(process.execPath)} scripts/wake-on-jobs.mjs; echo "wake watcher exited at $(date); restarting in 5s"; sleep 5; done`,
+  ]);
+}
+
 async function ensureApp() {
+  ensureWakeWatcher();
   if (await appReachable()) return;
   log(`Agency is not reachable at ${agencyUrl}.`);
   if (startApp && process.env.TMUX) {
-    const hasWindow = spawnSync("tmux", ["list-windows", "-t", tmuxSession, "-F", "#{window_name}"], { encoding: "utf8" });
-    if (!(hasWindow.stdout || "").split("\n").includes("app")) {
+    if (!tmuxWindows().includes("app")) {
       log("Starting the Agency app in a second tmux window.");
       spawnSync("tmux", [
         "new-window", "-d", "-t", tmuxSession, "-n", "app", "-c", root,
