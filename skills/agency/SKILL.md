@@ -62,6 +62,8 @@ When you mark a job `running`, `done`, or `failed`, include `chatUrl`, the claud
 
 Users may add instructions while a job is queued or running. Preserve the `feedbackRevision` returned with the job, reread that exact job before material actions and before finishing, and include the current revision in status updates. A 409 means new instructions arrived; reread and incorporate them before continuing. Never finish from an older instruction snapshot.
 
+The user can close any card themselves from the app (Close, shortcut C), which marks it done without a job. An agent may close a New, Working, or Parked card the same way with `action: "close"` and a verified note saying why, for example when the work turns out to be already done.
+
 When the user asks to park a card, move it to Parked through `/api/ideas/park` instead of treating the request as an ordinary card rewrite. `until` is optional, but when supplied it must include a timezone; the card returns to New automatically after that time. Review parked cards once at the start of each day: close those verified complete, bring back those needing the user's attention, and leave the rest parked. Parking is reversible and grants no permission to perform the card's action.
 
 Agency source may be shared with other users. Never push private data into its repository.

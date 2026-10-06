@@ -30,21 +30,27 @@ export async function POST(request: Request) {
   const note = payload.note?.trim().slice(0, 5000) ?? "";
   const normalized = normalizeParkedUntil(payload.until);
   if (action === "park" && normalized.error) return Response.json({ error: normalized.error }, { status: 400 });
-  if (action === "close" && !note) return Response.json({ error: "Closing a parked card needs a verified note." }, { status: 400 });
+  // The user closes from the app without a note; an agent must say why it closed.
+  const fromAgent = !request.headers.get("origin");
+  if (action === "close" && fromAgent && !note) return Response.json({ error: "Closing a card needs a verified note." }, { status: 400 });
 
   const db = await ensureDatabase();
   const idea = await db.prepare("SELECT id, version, status FROM ideas WHERE id = ?").bind(payload.id).first<{ id: number; version: number; status: string }>();
   if (!idea) return Response.json({ error: "Card not found" }, { status: 404 });
   if (idea.version !== payload.version) return Response.json({ error: "Card changed while you were reading" }, { status: 409 });
   if (action === "park" && !["new", "working"].includes(idea.status)) return Response.json({ error: "Only New or Working cards can be parked" }, { status: 409 });
-  if (action !== "park" && idea.status !== "parked") return Response.json({ error: "Card is not parked" }, { status: 409 });
+  if (action === "unpark" && idea.status !== "parked") return Response.json({ error: "Card is not parked" }, { status: 409 });
+  if (action === "close" && !["new", "working", "parked"].includes(idea.status)) return Response.json({ error: "Card is already closed" }, { status: 409 });
 
   const update = action === "park"
     ? db.prepare("UPDATE ideas SET status = 'parked', parked_at = CURRENT_TIMESTAMP, parked_until = ?, parked_note = ? WHERE id = ? AND version = ? AND status IN ('new', 'working')").bind(normalized.value, note, payload.id, payload.version)
     : action === "unpark"
       ? db.prepare("UPDATE ideas SET status = 'new', parked_at = NULL, parked_until = NULL, parked_note = '', created_at = CURRENT_TIMESTAMP WHERE id = ? AND version = ? AND status = 'parked'").bind(payload.id, payload.version)
-      : db.prepare("UPDATE ideas SET status = 'done', parked_at = NULL, parked_until = NULL, parked_note = '', created_at = CURRENT_TIMESTAMP WHERE id = ? AND version = ? AND status = 'parked'").bind(payload.id, payload.version);
-  const label = action === "park" ? (normalized.value ? `Park until ${normalized.value} UTC` : "Park indefinitely") : action === "unpark" ? "Bring back to New" : "Closed during parked review";
+      : db.prepare("UPDATE ideas SET status = 'done', parked_at = NULL, parked_until = NULL, parked_note = '', created_at = CURRENT_TIMESTAMP WHERE id = ? AND version = ? AND status IN ('new', 'working', 'parked')").bind(payload.id, payload.version);
+  const label = action === "park"
+    ? (normalized.value ? `Park until ${normalized.value} UTC` : "Park indefinitely")
+    : action === "unpark" ? "Bring back to New"
+      : fromAgent ? "Closed during parked review" : "Closed by you";
   const result = await update.run();
   const changes = Number((result as { meta?: { changes?: number } }).meta?.changes ?? 0);
   if (!changes) return Response.json({ error: "Card changed while you were reading" }, { status: 409 });

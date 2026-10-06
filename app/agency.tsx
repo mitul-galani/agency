@@ -872,6 +872,34 @@ export function Agency() {
     }
   }, [active, feedbackSubmitting, jobInFlight, load, selectIdea, view, visibleIdeas]);
 
+  const submitClose = useCallback(async () => {
+    const target = active;
+    if (!target || jobInFlight || feedbackSubmitting) return;
+    setFeedbackSubmitting(true);
+    try {
+      const response = await fetch("/api/ideas/park", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: target.id, version: target.version, action: "close" }),
+      });
+      if (response.status === 409) {
+        await load();
+        setMessage("That card changed. Check it and try again.");
+        return;
+      }
+      if (!response.ok) {
+        setMessage("That card could not be closed. Try once more.");
+        return;
+      }
+      const nextSelection = nextCardAfterRemoval(target.id, visibleIdeas);
+      selectIdea(nextSelection);
+      setMessage("Closed. It is in your work history.");
+      await load(view, { preferred: nextSelection, excludeId: target.id });
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }, [active, feedbackSubmitting, jobInFlight, load, selectIdea, view, visibleIdeas]);
+
   useEffect(() => {
     if (!active || composer || selectionMenu || selectionAttachment) return;
     const shortcut = (event: KeyboardEvent) => {
@@ -899,6 +927,9 @@ export function Agency() {
       } else if (action === "park") {
         event.preventDefault();
         void submitTogglePark();
+      } else if (action === "close") {
+        event.preventDefault();
+        void submitClose();
       } else if (action === "previous") {
         event.preventDefault();
         move(-1);
@@ -915,7 +946,7 @@ export function Agency() {
     };
     window.addEventListener("keydown", shortcut);
     return () => window.removeEventListener("keydown", shortcut);
-  }, [active, composer, move, selectionAttachment, selectionMenu, submitImprove, submitSkip, submitTogglePark]);
+  }, [active, composer, move, selectionAttachment, selectionMenu, submitClose, submitImprove, submitSkip, submitTogglePark]);
 
 
   async function submitTell() {
@@ -1186,6 +1217,14 @@ export function Agency() {
                 data-shortcut-hint={active.status === "parked" ? "Bring back · P" : "Park · P"}
                 onClick={() => void submitTogglePark()}
               >{active.status === "parked" ? "Bring back" : "Park"}<kbd>P</kbd></button>
+              <button
+                className="is-close radar-shortcut-hint"
+                disabled={jobInFlight || feedbackSubmitting}
+                aria-keyshortcuts="C"
+                aria-label="Close this card as done"
+                data-shortcut-hint="Close · C"
+                onClick={() => void submitClose()}
+              >Close <kbd>C</kbd></button>
               <button
                 className="is-skip radar-shortcut-hint"
                 disabled={jobInFlight || feedbackSubmitting}

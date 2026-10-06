@@ -46,6 +46,9 @@ test("wakes only due parked cards", () => {
 test("P is the park shortcut", () => {
   assert.equal(cardShortcut({ key: "p", editable: false }), "park");
   assert.equal(cardShortcut({ key: "p", editable: true }), null);
+  assert.equal(cardShortcut({ key: "c", editable: false }), "close");
+  assert.equal(cardShortcut({ key: "C", editable: false }), "close");
+  assert.equal(cardShortcut({ key: "c", editable: true }), null);
 });
 
 test("new instructions prevent completion from an older job snapshot", () => {

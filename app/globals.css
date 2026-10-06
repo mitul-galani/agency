@@ -281,6 +281,8 @@ footer.radar-footer i { width: 6px; height: 6px; margin-right: 4px; border-radiu
 .radar-inline-change button.is-improve:hover { background: var(--accent-soft); }
 .radar-inline-change button.is-park { color: var(--warn); }
 .radar-inline-change button.is-park:hover { background: var(--warn-soft); }
+.radar-inline-change button.is-close { color: var(--ok, #247454); }
+.radar-inline-change button.is-close:hover { background: var(--ok-soft, #eaf5ee); }
 .radar-inline-change button.is-send { padding: 0; color: white; background: var(--ink); }
 .radar-inline-change button.is-send:hover { background: #2b2a22; }
 .radar-inline-change button:disabled { opacity: .3; }
