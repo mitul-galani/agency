@@ -122,7 +122,9 @@ async function runMaintenance(db: ReturnType<typeof getD1>) {
   // A replacement card can set an idea back to New before the agent posts its
   // terminal outcome. Reconcile from the latest explicit marker so completed,
   // review, and blocked remain card states instead of agent-run states. Never
-  // revive a card the user already dismissed.
+  // revive a card the user already dismissed, and only let a job outcome win
+  // when it is newer than the card's last status change (closing a card stamps
+  // created_at), or an older "review" job would reopen a card the user closed.
   await db.prepare(`
     UPDATE ideas
     SET status = CASE (
@@ -145,6 +147,13 @@ async function runMaintenance(db: ReturnType<typeof getD1>) {
         ORDER BY latest.id DESC
         LIMIT 1
       ) IS NOT NULL
+      AND (
+        SELECT latest.updated_at
+        FROM agent_jobs latest
+        WHERE latest.idea_id = ideas.id
+        ORDER BY latest.id DESC
+        LIMIT 1
+      ) >= ideas.created_at
   `).run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_agent_jobs_status_created ON agent_jobs(status, created_at)").run();
   await db.prepare("CREATE INDEX IF NOT EXISTS idx_card_attention_decided ON card_attention(decided_at)").run();
