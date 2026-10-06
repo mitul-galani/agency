@@ -72,8 +72,13 @@ export function nudgeText(ids) {
 function nudge(coordinator, ids) {
   const text = nudgeText(ids);
   const prompt = `Use the SendMessage tool to send exactly the following message to the Claude session named ${JSON.stringify(coordinator.name)} (pid ${coordinator.pid}). Send it verbatim, then reply with one word: sent.\n\n${text}`;
+  // No MCP servers: the nudge only needs the built-in SendMessage tool, and
+  // starting the user's servers each time spawns node processes that macOS
+  // asks the user to allow. The prompt must come before --mcp-config, which
+  // is variadic.
   const result = spawnSync("claude", [
-    "-p", "--model", nudgeModel, "--permission-mode", "bypassPermissions", "--max-turns", "4", prompt,
+    "-p", prompt, "--model", nudgeModel, "--permission-mode", "bypassPermissions", "--max-turns", "4",
+    "--strict-mcp-config", "--mcp-config", JSON.stringify({ mcpServers: {} }),
   ], { cwd: root, encoding: "utf8", timeout: 120_000 });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
   const ok = result.status === 0 && /sent/i.test(output);
