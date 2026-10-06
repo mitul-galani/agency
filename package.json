@@ -18,6 +18,10 @@
     "agency:discovery:stop": "tmux kill-session -t ${AGENCY_TMUX_SESSION:-agency-discovery}",
     "agency:discovery:install": "node scripts/install-launchd.mjs",
     "agency:discovery:uninstall": "node scripts/install-launchd.mjs --remove",
+    "agency:health": "node scripts/agency-health.mjs check",
+    "agency:health:fix": "node scripts/agency-health.mjs fix",
+    "agency:health:auto": "node scripts/agency-health.mjs auto",
+    "agency:health:claude": "node scripts/start-health.mjs",
     "share:check": "node scripts/check-share.mjs",
     "db:generate": "drizzle-kit generate",
     "card:push": "node scripts/push-card.mjs"

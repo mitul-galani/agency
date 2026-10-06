@@ -16,32 +16,29 @@
  * Stop it with `npm run agency:discovery:stop`; watch it with
  * `npm run agency:discovery:attach`.
  */
-import { spawn, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync, appendFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildInitialPrompt, buildResumePrompt, forbiddenParent } from "./lib/discovery-launcher.mjs";
 import {
-  buildInitialPrompt,
-  buildResumePrompt,
-  forbiddenParent,
-  restartDelayMs,
-  shouldStartFresh,
-} from "./lib/discovery-launcher.mjs";
+  WINDOWS, agencyUrl, appLoopCommand, appStatus, ensureWindow, healthClaudeCommand, healthLoopCommand,
+  root, tmuxSession as stackSession, tmuxSessionExists, wakeLoopCommand,
+} from "./lib/stack.mjs";
+import { sleep, supervise } from "./lib/supervise.mjs";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const agencyUrl = process.env.RADAR_URL || "http://localhost:3100";
 const model = process.env.AGENCY_CLAUDE_MODEL || "claude-opus-5-5";
 const discoveryCron = process.env.AGENCY_DISCOVERY_CRON || "6,36 9-20 * * *";
 const keepaliveCron = process.env.AGENCY_KEEPALIVE_CRON || "6 0,3,6 * * *";
 // Where the coordinator runs: a checkout with its own CLAUDE.md and state.
 const discoveryDir = resolve(process.env.AGENCY_DISCOVERY_DIR || root);
-const tmuxSession = process.env.AGENCY_TMUX_SESSION || "agency-discovery";
+const tmuxSession = stackSession;
 const useTmux = process.env.AGENCY_NO_TMUX !== "1";
 const startApp = process.env.AGENCY_START_APP !== "0";
 // Wake the execution coordinator when a job is queued (scripts/wake-on-jobs.mjs).
 const wakeOnJobs = process.env.AGENCY_WAKE_ON_JOBS !== "0";
-const agencyPort = new URL(agencyUrl).port || "3100";
+// Keep the stack healthy without a person: the checker and the Agency Health session.
+const healthOn = process.env.AGENCY_HEALTH !== "0";
 const runtimePath = resolve(discoveryDir, "discovery-runtime.json");
 const logPath = resolve(discoveryDir, "discovery-supervisor.log");
 // The coordinator creates this file to ask for a restart (see CLAUDE.md). A
@@ -65,17 +62,7 @@ function fail(message) {
   process.exit(1);
 }
 
-function readRuntime() {
-  try {
-    return JSON.parse(readFileSync(runtimePath, "utf8"));
-  } catch {
-    return null;
-  }
-}
 
-function writeRuntime(runtime) {
-  writeFileSync(runtimePath, `${JSON.stringify(runtime, null, 2)}\n`);
-}
 
 function ancestorCommands() {
   const commands = [];
@@ -91,29 +78,12 @@ function ancestorCommands() {
   return commands;
 }
 
-async function appReachable() {
-  try {
-    const response = await fetch(`${agencyUrl}/api/state?light=1`, {
-      headers: { "x-radar-local-agent": "1" },
-      signal: AbortSignal.timeout(2500),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
 
 function tmuxAvailable() {
   return spawnSync("tmux", ["-V"], { encoding: "utf8" }).status === 0;
 }
 
-function tmuxSessionExists() {
-  return spawnSync("tmux", ["has-session", "-t", tmuxSession]).status === 0;
-}
 
-function sleep(ms) {
-  return new Promise((done) => setTimeout(done, ms));
-}
 
 // --- preflight ---------------------------------------------------------------
 
@@ -140,7 +110,7 @@ if (useTmux && !process.env.TMUX) {
     console.log(`Watch it with: tmux attach -t ${tmuxSession}`);
     process.exit(0);
   }
-  const passthrough = ["RADAR_URL", "AGENCY_CLAUDE_MODEL", "AGENCY_DISCOVERY_CRON", "AGENCY_KEEPALIVE_CRON", "AGENCY_START_APP", "AGENCY_WAKE_ON_JOBS", "AGENCY_EXECUTION_SESSION", "AGENCY_NUDGE_MODEL"]
+  const passthrough = ["RADAR_URL", "AGENCY_CLAUDE_MODEL", "AGENCY_DISCOVERY_CRON", "AGENCY_KEEPALIVE_CRON", "AGENCY_START_APP", "AGENCY_WAKE_ON_JOBS", "AGENCY_EXECUTION_SESSION", "AGENCY_NUDGE_MODEL", "AGENCY_HEALTH", "AGENCY_HEALTH_CRON"]
     .filter((name) => process.env[name])
     .flatMap((name) => ["-e", `${name}=${process.env[name]}`]);
   const started = spawnSync("tmux", [
@@ -168,141 +138,40 @@ if (!process.env.TMUX) {
 
 // --- supervise ---------------------------------------------------------------
 
-let child = null;
-let stopping = false;
-
-function stop(signal) {
-  if (stopping) return;
-  stopping = true;
-  log(`Stopping (${signal}).`);
-  if (child && child.exitCode === null) {
-    child.kill("SIGINT");
-    setTimeout(() => {
-      if (child && child.exitCode === null) child.kill("SIGTERM");
-    }, 5_000).unref();
-  }
-}
-process.on("SIGINT", () => stop("SIGINT"));
-process.on("SIGTERM", () => stop("SIGTERM"));
-process.on("SIGHUP", () => stop("SIGHUP"));
-
-// The dev server can die on an uncaught error from the Cloudflare tooling. Two
-// things keep that from compounding: its dev registry lives outside the
-// repository (the heartbeat on those files is what has crashed it), and any
-// workerd the dead server left behind is reaped before the next start, so
-// stale processes never share the local database with the new one.
-function appLoopCommand() {
-  const registry = "$HOME/.cache/agency/wrangler-registry";
-  const orphans = JSON.stringify(`${root}/node_modules/@cloudflare/workerd`);
-  return [
-    "while true; do",
-    `MINIFLARE_REGISTRY_PATH="${registry}" npm run dev -- --host 127.0.0.1 --port ${agencyPort};`,
-    `echo "Agency app exited at $(date); restarting in 5s";`,
-    `pkill -P 1 -f ${orphans};`,
-    "sleep 5; done",
-  ].join(" ");
-}
-
-function tmuxWindows() {
-  const listed = spawnSync("tmux", ["list-windows", "-t", tmuxSession, "-F", "#{window_name}"], { encoding: "utf8" });
-  return (listed.stdout || "").split("\n");
-}
-
-function ensureWakeWatcher() {
-  if (!wakeOnJobs || !process.env.TMUX || tmuxWindows().includes("wake")) return;
-  log("Starting the job wake watcher in a tmux window.");
-  spawnSync("tmux", [
-    "new-window", "-d", "-t", tmuxSession, "-n", "wake", "-c", root,
-    `while true; do ${JSON.stringify(process.execPath)} scripts/wake-on-jobs.mjs; echo "wake watcher exited at $(date); restarting in 5s"; sleep 5; done`,
-  ]);
+function ensureCompanions() {
+  if (!process.env.TMUX || !tmuxSessionExists()) return;
+  if (wakeOnJobs && ensureWindow(WINDOWS.wake, wakeLoopCommand())) log("Started the job wake watcher in a tmux window.");
+  if (healthOn && ensureWindow(WINDOWS.health, healthLoopCommand())) log("Started the health checker in a tmux window.");
+  if (healthOn && ensureWindow(WINDOWS.healthClaude, healthClaudeCommand())) log("Started the Agency Health coordinator in a tmux window.");
 }
 
 async function ensureApp() {
-  ensureWakeWatcher();
-  if (await appReachable()) return;
+  ensureCompanions();
+  if ((await appStatus()).ok) return;
   log(`Agency is not reachable at ${agencyUrl}.`);
   if (startApp && process.env.TMUX) {
-    if (!tmuxWindows().includes("app")) {
-      log("Starting the Agency app in a second tmux window.");
-      spawnSync("tmux", [
-        "new-window", "-d", "-t", tmuxSession, "-n", "app", "-c", root,
-        appLoopCommand(),
-      ]);
-    }
+    if (ensureWindow(WINDOWS.app, appLoopCommand())) log("Starting the Agency app in a second tmux window.");
   } else {
     log("Waiting for it. Start it with: npm run dev");
   }
   let waited = 0;
-  while (!stopping && !(await appReachable())) {
+  while (!(await appStatus()).ok) {
     await sleep(5_000);
     waited += 5_000;
     if (waited % 60_000 === 0) log(`Still waiting for Agency at ${agencyUrl}.`);
   }
 }
 
-function launchArgs(runtime) {
-  const fresh = shouldStartFresh(runtime);
-  const sessionId = fresh ? randomUUID() : runtime.sessionId;
-  const prompt = fresh
-    ? buildInitialPrompt({ agencyUrl, discoveryCron, keepaliveCron })
-    : buildResumePrompt({ agencyUrl, discoveryCron, keepaliveCron });
-  const args = [
-    "--model", model,
-    "--effort", "high",
-    "--permission-mode", "bypassPermissions",
-    "--name", "Agency Discovery",
-    ...(fresh ? ["--session-id", sessionId] : ["--resume", sessionId]),
-    prompt,
-  ];
-  return { fresh, sessionId, args };
-}
-
-function runClaude(args) {
-  return new Promise((done) => {
-    const startedAt = Date.now();
-    rmSync(restartRequestPath, { force: true });
-    child = spawn(claudeBinary, args, { cwd: discoveryDir, stdio: "inherit", env: process.env });
-    const watch = setInterval(() => {
-      if (!existsSync(restartRequestPath) || !child || child.exitCode !== null) return;
-      rmSync(restartRequestPath, { force: true });
-      log("Coordinator requested a restart; resuming it with fresh connections.");
-      child.kill("SIGTERM");
-    }, 30_000);
-    child.on("exit", () => clearInterval(watch));
-    child.on("error", (error) => {
-      log(`Could not start Claude: ${error.message}`);
-      done({ exitCode: -1, signal: null, durationMs: Date.now() - startedAt });
-    });
-    child.on("exit", (exitCode, signal) => {
-      child = null;
-      done({ exitCode, signal, durationMs: Date.now() - startedAt });
-    });
-  });
-}
-
-log(`Supervisor started with ${version.stdout.trim()} (pid ${process.pid}) in ${discoveryDir}.`);
 log(`Discovery schedule: ${discoveryCron}. Keepalive: ${keepaliveCron}.`);
-
-while (!stopping) {
-  await ensureApp();
-  if (stopping) break;
-  const runtime = readRuntime() ?? { launches: [] };
-  const { fresh, sessionId, args } = launchArgs(runtime);
-  const launches = (runtime.launches ?? []).slice(-50);
-  const launchedAt = new Date().toISOString();
-  writeRuntime({ ...runtime, sessionId, launches, lastLaunchAt: launchedAt, supervisorPid: process.pid });
-  log(fresh ? `Starting a new coordinator session ${sessionId}.` : `Resuming coordinator session ${sessionId}.`);
-
-  const result = await runClaude(args);
-  const record = { sessionId, at: launchedAt, ...result };
-  writeRuntime({ ...(readRuntime() ?? {}), sessionId, launches: [...launches, record] });
-  log(`Claude exited (code ${result.exitCode}, signal ${result.signal}) after ${Math.round(result.durationMs / 1000)}s.`);
-  if (stopping) break;
-
-  const delay = restartDelayMs([...launches, record]);
-  log(`Relaunching in ${Math.round(delay / 1000)}s.`);
-  await sleep(delay);
-}
-
-log("Supervisor stopped.");
+await supervise({
+  cwd: discoveryDir,
+  name: "Agency Discovery",
+  model,
+  runtimePath,
+  logPath,
+  restartRequestPath,
+  initialPrompt: () => buildInitialPrompt({ agencyUrl, discoveryCron, keepaliveCron }),
+  resumePrompt: () => buildResumePrompt({ agencyUrl, discoveryCron, keepaliveCron }),
+  beforeLaunch: ensureApp,
+});
 process.exit(0);

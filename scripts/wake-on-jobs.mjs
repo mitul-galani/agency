@@ -25,6 +25,8 @@ const pollMs = Number(process.env.AGENCY_WAKE_POLL_MS || 10_000);
 const coordinatorPattern = new RegExp(process.env.AGENCY_EXECUTION_SESSION || "personal agency", "i");
 const nudgeModel = process.env.AGENCY_NUDGE_MODEL || "sonnet";
 const once = process.argv.includes("--once");
+// --force nudges for every queued job, not only ones this process has not seen.
+const force = process.argv.includes("--force");
 const sessionsDir = join(homedir(), ".claude", "sessions");
 
 function log(message) {
@@ -103,7 +105,7 @@ async function poll() {
     log(`Agency not reachable (${error.message}); will retry.`);
     return;
   }
-  const fresh = jobs.map((job) => job.id).filter((id) => !seen.has(id));
+  const fresh = jobs.map((job) => job.id).filter((id) => force || !seen.has(id));
   for (const id of fresh) seen.add(id);
   if (!fresh.length) return;
   if (!primed) {

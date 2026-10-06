@@ -19,8 +19,17 @@ That is the only command. The launcher:
 5. Restarts the coordinator on request. If a connector drops out of the long-running session, the coordinator creates `discovery-restart-requested`; the supervisor sees it within 30 seconds, stops Claude, and resumes the same session with every connector started fresh.
 6. Wakes the execution coordinator when a job is queued. A `wake` tmux window runs `scripts/wake-on-jobs.mjs`, which polls the queue every 10 seconds and, on a new job, sends the coordinator a cross-session message through a short headless Claude run (about 7 seconds, `AGENCY_NUDGE_MODEL`, default `sonnet`). The coordinator processes the queue on receipt instead of waiting for its next scheduled tick. `AGENCY_WAKE_ON_JOBS=0` turns it off; `AGENCY_EXECUTION_SESSION` is the regex that finds the coordinator by session name (default `personal agency`).
 7. The discovery cron renews itself. Session crons expire after seven days; the scheduled prompt re-creates both tasks once they are five days old and records the new IDs in `discovery-state.json`.
+8. Keeps itself healthy (see below). A `health` window runs the checker every minute; a `health-claude` window runs the Agency Health session that handles what the checker cannot. `AGENCY_HEALTH=0` turns both off.
 
 Running the command again while it is up just tells you it is running.
+
+## Self-healing
+
+Nothing here needs a person to open a chat when something breaks.
+
+- `scripts/agency-health.mjs auto` (the `health` window, log in `health.log`, state in `health-state.json`) checks every minute: tmux session gone, app window missing or not answering, repeated 500s in the app's output, orphaned `workerd` processes, wake or health windows missing, discovery process gone or a scheduled run missed, a connector failing on two consecutive discovery passes, no execution coordinator session, jobs queued for over ten minutes with an idle coordinator, and a checkout inside a macOS-protected folder. Each finding has a fix it applies itself (restart the window, reap orphans, ask the discovery supervisor for a restart, nudge the coordinator, relaunch the execution coordinator with `--resume` and its recovered schedules, or `launchctl kickstart` the whole stack), with a cooldown so a fix gets time to work. After three fixes that did not take, it marks the issue unresolved and tells you once every six hours through the notifier webhook in `~/.claude/secrets/claude_notifier_webhook`.
+- The Agency Health session (`scripts/start-health.mjs`, playbook `health/CLAUDE.md`, supervised and resumed exactly like the discovery coordinator) runs a pass every 15 minutes (`AGENCY_HEALTH_CRON`). It only investigates when the checker reports an unresolved or unfixable issue: it reads the windows and logs, applies fixes, and may commit and push a code fix when tests and lint pass. It never creates cards, processes jobs, or touches external services.
+- By hand: `npm run agency:health` prints the full report, `npm run agency:health:fix <code>` applies one fix (`app`, `orphans`, `wake`, `health`, `health-claude`, `discovery-restart`, `nudge`, `execution`, `kickstart`).
 
 The coordinator's working directory is the repository by default. For a private checkout with its own `CLAUDE.md`, state file, and settings, set `AGENCY_DISCOVERY_DIR`:
 
@@ -37,7 +46,7 @@ npm run agency:discovery:install    # also start it at every login (launchd, Run
 npm run agency:discovery:uninstall  # remove the login item; a running session is untouched
 ```
 
-The launcher writes `discovery-runtime.json` (session ID, launch history) and `discovery-supervisor.log` next to the coordinator's `CLAUDE.md`. Both are ignored by git.
+The launcher writes `discovery-runtime.json` (session ID, launch history) and `discovery-supervisor.log` next to the coordinator's `CLAUDE.md`; the health session keeps the same two files in `health/`. All are ignored by git.
 
 ## Where the checkout must live (macOS)
 
