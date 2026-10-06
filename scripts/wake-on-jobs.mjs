@@ -41,26 +41,32 @@ async function queuedJobs() {
   return (body.jobs ?? []).filter((job) => job.status === "queued");
 }
 
-/** The live execution coordinator: newest registry entry whose name matches. */
+/**
+ * The live execution coordinator. A resumed background session is renamed
+ * after its first prompt, so a name match is only the first choice; the
+ * fallback is the newest background session running in the repository.
+ */
 export function findCoordinator(dir = sessionsDir, pattern = coordinatorPattern, cwd = root) {
-  let best = null;
+  let byName = null;
+  let byPlace = null;
   let files = [];
   try {
     files = readdirSync(dir).filter((file) => file.endsWith(".json"));
   } catch {
     return null;
   }
+  const newer = (candidate, current) => !current || (candidate.startedAt ?? 0) > (current.startedAt ?? 0);
   for (const file of files) {
     try {
       const record = JSON.parse(readFileSync(join(dir, file), "utf8"));
-      if (!record.name || !pattern.test(record.name)) continue;
       if (cwd && record.cwd && record.cwd !== cwd) continue;
-      if (!best || (record.startedAt ?? 0) > (best.startedAt ?? 0)) best = record;
+      if (record.name && pattern.test(record.name) && newer(record, byName)) byName = record;
+      if (record.kind === "bg" && newer(record, byPlace)) byPlace = record;
     } catch {
       // Not a session record.
     }
   }
-  return best;
+  return byName ?? byPlace;
 }
 
 export function nudgeText(ids) {

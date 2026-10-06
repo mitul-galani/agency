@@ -12,7 +12,10 @@ test("picks the newest matching coordinator session in the right directory", () 
   writeFileSync(join(dir, "3.json"), JSON.stringify({ pid: 3, name: "Personal Agency", cwd: "/elsewhere", startedAt: 30 }));
   writeFileSync(join(dir, "4.json"), JSON.stringify({ pid: 4, name: "Agency Discovery", cwd: "/repo", startedAt: 40 }));
   assert.equal(findCoordinator(dir, /personal agency/i, "/repo")?.pid, 2);
-  assert.equal(findCoordinator(dir, /nobody/i, "/repo"), null);
+  // No name match: fall back to the newest background session in the repo.
+  writeFileSync(join(dir, "5.json"), JSON.stringify({ pid: 5, name: "agency repository migration", kind: "bg", cwd: "/repo", startedAt: 50 }));
+  assert.equal(findCoordinator(dir, /nobody/i, "/repo")?.pid, 5);
+  assert.equal(findCoordinator(dir, /nobody/i, "/other"), null);
 });
 
 test("the wake message names the jobs and forbids new schedules", () => {
