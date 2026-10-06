@@ -33,3 +33,7 @@ Local-only data includes:
 - cards, source exports, and generated private artifacts
 
 These paths are Git-ignored. Run `npm run share:check` before pushing changes.
+
+## Job chat links
+
+`agent_jobs.chat_url` holds the claude.ai link to the Claude Code conversation that ran the job. The coordinator sends it as `chatUrl` on `POST /api/agent-jobs` status updates (only `https://claude.ai/code/session_…` links are accepted; an update without one keeps the existing link). `scripts/chat-link.mjs` resolves the current session's link from `~/.claude/sessions`. The card shows it as "Open chat" beside the job's status.

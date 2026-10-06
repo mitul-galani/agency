@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const job = await db.prepare(`
       SELECT id, idea_id AS ideaId, action, button_label AS buttonLabel, instruction,
              user_feedback AS userFeedback, feedback_revision AS feedbackRevision,
-             card_context AS cardContext, status, result, ticket_outcome AS ticketOutcome,
+             card_context AS cardContext, status, result, ticket_outcome AS ticketOutcome, chat_url AS chatUrl,
              created_at AS createdAt, updated_at AS updatedAt
       FROM agent_jobs WHERE id = ?
     `).bind(jobId).first<{ id: number; ideaId: number } & Record<string, unknown>>();
@@ -74,7 +74,13 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   if (!canUseQueue(request)) return Response.json({ error: "Missing agent key" }, { status: 401 });
-  const payload = (await request.json()) as { id?: number; status?: "running" | "done" | "failed"; result?: string; ticketOutcome?: TicketOutcome; feedbackRevision?: number };
+  const payload = (await request.json()) as { id?: number; status?: "running" | "done" | "failed"; result?: string; ticketOutcome?: TicketOutcome; feedbackRevision?: number; chatUrl?: string };
+  // The Claude conversation the coordinator is running this job in, so the
+  // card can open it. Only claude.ai session links are accepted.
+  const chatUrl = payload.chatUrl?.trim() ?? "";
+  if (chatUrl && !/^https:\/\/claude\.ai\/code\/session_[A-Za-z0-9]+$/.test(chatUrl)) {
+    return Response.json({ error: "chatUrl must be a claude.ai session link" }, { status: 400 });
+  }
   if (!payload.id || !["running", "done", "failed"].includes(payload.status ?? "")) return Response.json({ error: "Invalid job update" }, { status: 400 });
   if ((payload.status === "done" || payload.status === "failed") && !payload.result?.trim()) return Response.json({ error: "A finished job needs a concise result" }, { status: 400 });
   if (payload.ticketOutcome && !["completed", "review", "blocked"].includes(payload.ticketOutcome)) return Response.json({ error: "Invalid ticket outcome" }, { status: 400 });
@@ -94,7 +100,7 @@ export async function POST(request: Request) {
   }
   const ticketOutcome = resolveTicketOutcome(payload.status!, payload.ticketOutcome);
   const updated = await db.prepare(UPDATE_JOB_STATUS_SQL)
-    .bind(payload.status, payload.result?.slice(0, 20_000) ?? "", ticketOutcome, payload.id, job.status, job.feedbackRevision).run();
+    .bind(payload.status, payload.result?.slice(0, 20_000) ?? "", ticketOutcome, chatUrl, payload.id, job.status, job.feedbackRevision).run();
   if (!Number((updated as { meta?: { changes?: number } }).meta?.changes ?? 0)) {
     return Response.json({ error: "New instructions arrived. Read the job again before continuing." }, { status: 409 });
   }

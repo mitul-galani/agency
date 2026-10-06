@@ -119,6 +119,7 @@ export async function GET(request: Request) {
         j.instruction AS jobInstruction,
         j.user_feedback AS jobUserFeedback,
         j.feedback_revision AS jobFeedbackRevision,
+        j.chat_url AS jobChatUrl,
         j.updated_at AS jobUpdatedAt,
         COALESCE(j.updated_at, a.decided_at, i.created_at) AS closedAt,
         a.active_ms AS decisionActiveMs,

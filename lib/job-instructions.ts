@@ -16,6 +16,6 @@ export const APPEND_JOB_INSTRUCTION_SQL = `
 
 export const UPDATE_JOB_STATUS_SQL = `
   UPDATE agent_jobs
-  SET status = ?, result = ?, ticket_outcome = ?, updated_at = CURRENT_TIMESTAMP
+  SET status = ?, result = ?, ticket_outcome = ?, chat_url = COALESCE(NULLIF(?, ''), chat_url), updated_at = CURRENT_TIMESTAMP
   WHERE id = ? AND status = ? AND feedback_revision = ?
 `;

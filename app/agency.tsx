@@ -41,6 +41,7 @@ type Idea = {
   jobInstruction: string | null;
   jobUserFeedback: string | null;
   jobFeedbackRevision: number | null;
+  jobChatUrl: string | null;
   jobUpdatedAt: string | null;
   closedAt: string | null;
   decisionActiveMs: number | null;
@@ -594,6 +595,7 @@ export function Agency() {
     instruction: activeLiveState.jobInstruction?.trim() ?? "",
     feedback: activeLiveState.jobUserFeedback?.trim() ?? "",
     feedbackRevision: Number(activeLiveState.jobFeedbackRevision ?? 0),
+    chatUrl: activeLiveState.jobChatUrl?.trim() ?? "",
   }) : null, [activeLiveState]);
   const jobInFlight = activeJob?.status === "queued" || activeJob?.status === "running";
   const lastRoundInstruction = activeJob ? [activeJob.instruction, activeJob.feedback].filter(Boolean).join("\n") : "";
@@ -1126,7 +1128,7 @@ export function Agency() {
           {active.status === "parked" && <span className="radar-parked" role="status">Parked {formatParkedUntil(active.parkedUntil)}</span>}
           {jobInFlight && activeJob && (
             <section className="radar-job-brief" aria-label="Your instructions for this job">
-              <header><span>Your instructions</span><b>{activeJob.status === "queued" ? "Queued" : "In progress"}</b></header>
+              <header><span>Your instructions</span><span className="radar-job-meta">{activeJob.chatUrl && <a className="radar-chat-link" href={activeJob.chatUrl} target="_blank" rel="noopener noreferrer">Open chat ↗</a>}<b>{activeJob.status === "queued" ? "Queued" : "In progress"}</b></span></header>
               <strong>{activeJob.label || "Work on this card"}</strong>
               {activeJob.instruction && <p>{activeJob.instruction}</p>}
               {activeJob.feedback && <p className="is-feedback">{activeJob.feedback}</p>}
@@ -1134,7 +1136,7 @@ export function Agency() {
           )}
           {showLastRound && activeJob && (
             <section className="radar-last-round" aria-label="Last round with Agency">
-              <header><span>Last round</span><b>{activeJob.outcome === "review" ? "Back for review" : activeJob.status === "failed" ? "Needs attention" : "Finished"}</b></header>
+              <header><span>Last round</span><span className="radar-job-meta">{activeJob.chatUrl && <a className="radar-chat-link" href={activeJob.chatUrl} target="_blank" rel="noopener noreferrer">Open chat ↗</a>}<b>{activeJob.outcome === "review" ? "Back for review" : activeJob.status === "failed" ? "Needs attention" : "Finished"}</b></span></header>
               {lastRoundInstruction && <div><strong>What you asked</strong><p>{lastRoundInstruction}</p></div>}
               <div><strong>What Agency did</strong><p>{activeJob.result || "No completion note was saved."}</p></div>
             </section>

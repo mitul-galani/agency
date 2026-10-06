@@ -55,9 +55,9 @@ test("new instructions prevent completion from an older job snapshot", () => {
     execFileSync("sqlite3", [database, `
       CREATE TABLE agent_jobs (
         id INTEGER PRIMARY KEY, idea_id INTEGER, status TEXT, user_feedback TEXT,
-        feedback_revision INTEGER DEFAULT 0, result TEXT, ticket_outcome TEXT, updated_at TEXT
+        feedback_revision INTEGER DEFAULT 0, result TEXT, ticket_outcome TEXT, chat_url TEXT DEFAULT '', updated_at TEXT
       );
-      INSERT INTO agent_jobs VALUES (1, 10, 'running', 'Start here', 0, '', NULL, CURRENT_TIMESTAMP);
+      INSERT INTO agent_jobs VALUES (1, 10, 'running', 'Start here', 0, '', NULL, '', CURRENT_TIMESTAMP);
     `]);
     const appendSql = APPEND_JOB_INSTRUCTION_SQL.replaceAll("?", (match, offset) => {
       const before = APPEND_JOB_INSTRUCTION_SQL.slice(0, offset);
@@ -66,7 +66,7 @@ test("new instructions prevent completion from an older job snapshot", () => {
     });
     execFileSync("sqlite3", [database, appendSql]);
     const staleUpdate = UPDATE_JOB_STATUS_SQL
-      .replace("?", "'done'").replace("?", "'Finished'").replace("?", "'review'")
+      .replace("?", "'done'").replace("?", "'Finished'").replace("?", "'review'").replace("?", "''")
       .replace("?", "1").replace("?", "'running'").replace("?", "0");
     execFileSync("sqlite3", [database, staleUpdate]);
     const stale = JSON.parse(execFileSync("sqlite3", ["-json", database, "SELECT status,user_feedback,feedback_revision FROM agent_jobs"], { encoding: "utf8" }));
@@ -75,11 +75,12 @@ test("new instructions prevent completion from an older job snapshot", () => {
     assert.match(stale[0].user_feedback, /Also check Slack/);
 
     const currentUpdate = UPDATE_JOB_STATUS_SQL
-      .replace("?", "'done'").replace("?", "'Finished'").replace("?", "'review'")
+      .replace("?", "'done'").replace("?", "'Finished'").replace("?", "'review'").replace("?", "'https://claude.ai/code/session_01TEST'")
       .replace("?", "1").replace("?", "'running'").replace("?", "1");
     execFileSync("sqlite3", [database, currentUpdate]);
-    const current = JSON.parse(execFileSync("sqlite3", ["-json", database, "SELECT status FROM agent_jobs"], { encoding: "utf8" }));
+    const current = JSON.parse(execFileSync("sqlite3", ["-json", database, "SELECT status, chat_url FROM agent_jobs"], { encoding: "utf8" }));
     assert.equal(current[0].status, "done");
+    assert.equal(current[0].chat_url, "https://claude.ai/code/session_01TEST");
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
