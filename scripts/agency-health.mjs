@@ -42,7 +42,7 @@ const statePath = resolve(root, "health-state.json");
 const logPath = resolve(root, "health.log");
 const sessionsDir = join(homedir(), ".claude", "sessions");
 const projectsDir = join(homedir(), ".claude", "projects");
-const executionModel = process.env.AGENCY_CLAUDE_MODEL || "claude-opus-5-5";
+const executionModel = process.env.AGENCY_CLAUDE_MODEL || "claude-sonnet-5-5";
 const executionName = process.env.AGENCY_EXECUTION_NAME || "🧭 Personal Agency";
 
 const MINUTE = 60_000;

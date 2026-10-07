@@ -23,7 +23,7 @@ const agencyUrl = process.env.RADAR_URL || "http://localhost:3100";
 const pollMs = Number(process.env.AGENCY_WAKE_POLL_MS || 10_000);
 // The coordinator session is found by name in the Claude Code sessions registry.
 const coordinatorPattern = new RegExp(process.env.AGENCY_EXECUTION_SESSION || "personal agency", "i");
-const nudgeModel = process.env.AGENCY_NUDGE_MODEL || "sonnet";
+const nudgeModel = process.env.AGENCY_NUDGE_MODEL || "claude-sonnet-5-5";
 const once = process.argv.includes("--once");
 // --force nudges for every queued job, not only ones this process has not seen.
 const force = process.argv.includes("--force");

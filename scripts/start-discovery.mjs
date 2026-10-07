@@ -27,7 +27,7 @@ import {
 } from "./lib/stack.mjs";
 import { sleep, supervise } from "./lib/supervise.mjs";
 
-const model = process.env.AGENCY_CLAUDE_MODEL || "claude-opus-5-5";
+const model = process.env.AGENCY_CLAUDE_MODEL || "claude-sonnet-5-5";
 const discoveryCron = process.env.AGENCY_DISCOVERY_CRON || "6,36 9-20 * * *";
 const keepaliveCron = process.env.AGENCY_KEEPALIVE_CRON || "6 0,3,6 * * *";
 // Where the coordinator runs: a checkout with its own CLAUDE.md and state.

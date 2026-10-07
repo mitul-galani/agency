@@ -12,7 +12,7 @@ import { supervise } from "./lib/supervise.mjs";
 import { appStatus, root } from "./lib/stack.mjs";
 
 const healthDir = resolve(root, "health");
-const model = process.env.AGENCY_CLAUDE_MODEL || "claude-opus-5-5";
+const model = process.env.AGENCY_CLAUDE_MODEL || "claude-sonnet-5-5";
 const healthCron = process.env.AGENCY_HEALTH_CRON || "*/15 * * * *";
 
 if (!existsSync(resolve(healthDir, "CLAUDE.md"))) {
