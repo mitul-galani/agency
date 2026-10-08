@@ -52,6 +52,8 @@ The launcher writes `discovery-runtime.json` (session ID, launch history) and `d
 
 Keep the repository and the discovery checkout outside `~/Documents`, `~/Desktop`, and `~/Downloads`. macOS asks each new binary for permission to touch those folders, and processes started by the login item or by tmux have no app to ask through, so they are silently denied: the app's database writes fail with "internal error", `npm` cannot even read its working directory, and every Claude Code update brings a fresh "node" prompt. A plain path such as `~/agency` has none of that.
 
+The same mechanism produces a "claude (or node) wants to access data from other apps" prompt whenever an unattended session starts an MCP server that reads a sandboxed app's container; the 1Password server (`1password-mcp`) is one. Disable such servers for the coordinator folders (`/mcp` in a session rooted there, or `disabledMcpServers` for the project in `~/.claude.json`) rather than answering the prompt: macOS keys the grant to the exact binary, so every Claude update would ask again.
+
 ## What must not run it
 
 The coordinator must be a child of tmux or of a plain terminal. It must never be started from inside a Codex thread, a Claude session, or the Claude background daemon: all three end their child processes when they shut down, which takes the in-memory schedule with them. The launcher refuses to run in the foreground under any of those parents; the tmux path is always safe.
