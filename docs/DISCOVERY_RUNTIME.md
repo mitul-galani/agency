@@ -31,11 +31,14 @@ Nothing here needs a person to open a chat when something breaks.
 - The Agency Health session (`scripts/start-health.mjs`, playbook `health/CLAUDE.md`, supervised and resumed exactly like the discovery coordinator) runs a pass every 15 minutes (`AGENCY_HEALTH_CRON`). It only investigates when the checker reports an unresolved or unfixable issue: it reads the windows and logs, applies fixes, and may commit and push a code fix when tests and lint pass. It never creates cards, processes jobs, or touches external services.
 - By hand: `npm run agency:health` prints the full report, `npm run agency:health:fix <code>` applies one fix (`app`, `orphans`, `wake`, `health`, `health-claude`, `discovery-restart`, `nudge`, `execution`, `kickstart`).
 
-The coordinator's working directory is the repository by default. For a private checkout with its own `CLAUDE.md`, state file, and settings, set `AGENCY_DISCOVERY_DIR`:
+The coordinator's working directory is the repository by default. The recommended setup is a dedicated checkout outside the repository that holds the coordinator's own `CLAUDE.md`, state file, logs, and settings. `templates/discovery/CLAUDE.md` is the coordinator's full playbook (pass windows, the status protocol, every mandatory source, transcript-first, dedupe, the schedule and keepalive, renewal, and restart requests); the init script copies it and writes a `.claude/settings.local.json` whose paths point back at this repository:
 
 ```sh
-AGENCY_DISCOVERY_DIR=/path/to/agency-discovery npm run agency:discovery
+npm run agency:discovery:init -- ~/agency-discovery --timezone America/New_York --muesli-guide ~/MUESLI.md
+AGENCY_DISCOVERY_DIR=~/agency-discovery npm run agency:discovery
 ```
+
+The template reads everything personal through the settings' `env` (`AGENCY_TIMEZONE`, `ME_PATH`, `APPROVALS_PATH`, `PERSISTENT_PATH`, `MUESLI_GUIDE_PATH`, `WISPR_FLOW_READER`, …), so the design stays in git while names, channels, and private files stay in the checkout. Add your own rules to the checkout's `CLAUDE.md` after the template; keep the sections it defines.
 
 ## Watch, stop, and survive reboots
 

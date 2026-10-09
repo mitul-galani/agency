@@ -16,6 +16,7 @@
     "agency:discovery": "node scripts/start-discovery.mjs",
     "agency:discovery:attach": "tmux attach -t ${AGENCY_TMUX_SESSION:-agency-discovery}",
     "agency:discovery:stop": "tmux kill-session -t ${AGENCY_TMUX_SESSION:-agency-discovery}",
+    "agency:discovery:init": "node scripts/init-discovery.mjs",
     "agency:discovery:install": "node scripts/install-launchd.mjs",
     "agency:discovery:uninstall": "node scripts/install-launchd.mjs --remove",
     "agency:health": "node scripts/agency-health.mjs check",
