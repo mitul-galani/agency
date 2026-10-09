@@ -10,7 +10,7 @@ import {
 } from "../scripts/lib/discovery-launcher.mjs";
 
 test("refuses parents that reap their children", () => {
-  assert.equal(forbiddenParent(["/bin/zsh -l", "login -pf mitul", "/sbin/launchd"]), null);
+  assert.equal(forbiddenParent(["/bin/zsh -l", "login -pf someone", "/sbin/launchd"]), null);
   assert.equal(forbiddenParent(["tmux: server", "/sbin/launchd"]), null);
   assert.match(forbiddenParent(["/bin/zsh -lc claude --model opus", "/Applications/ChatGPT.app/Contents/Resources/codex app-server"]).reason, /Codex|ChatGPT/);
   assert.match(forbiddenParent(["/Users/me/.local/bin/claude daemon run --json-path x"]).reason, /daemon/);
