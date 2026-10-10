@@ -20,13 +20,11 @@ test("oldest queued age uses the earliest job and tolerates sqlite timestamps", 
 test("a missed run stops asking for restarts once one happened and no catch-up can run", () => {
   const now = Date.parse("2026-10-10T01:30:00Z");
   const stale = { state: "stale", missedRunAt: "2026-10-10T00:36:00.000Z", nextRunAt: "2026-10-10T13:06:00.000Z" };
-  const before = Date.parse("2026-10-10T00:30:00Z");
-  const after = Date.parse("2026-10-10T00:56:00Z");
   assert.equal(missedRunNeedsRestart(stale, undefined, now), true);
-  assert.equal(missedRunNeedsRestart(stale, before, now), true);
-  assert.equal(missedRunNeedsRestart(stale, after, now), false);
+  assert.equal(missedRunNeedsRestart(stale, "2026-10-09T00:36:00.000Z", now), true);
+  assert.equal(missedRunNeedsRestart(stale, stale.missedRunAt, now), false);
   // Inside discovery hours a catch-up pass is still possible, so keep restarting.
   const inHours = { ...stale, nextRunAt: "2026-10-10T01:36:00.000Z" };
-  assert.equal(missedRunNeedsRestart(inHours, after, now), true);
+  assert.equal(missedRunNeedsRestart(inHours, stale.missedRunAt, now), true);
   assert.equal(missedRunNeedsRestart({ state: "idle", missedRunAt: null }, undefined, now), false);
 });

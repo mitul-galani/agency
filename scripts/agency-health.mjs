@@ -173,13 +173,14 @@ export function protectedPath(path) {
 // rightly declines to catch up (it is outside discovery hours), so repeating
 // the restart cannot clear the flag and would eventually page the owner for
 // nothing. Inside discovery hours the next run is never more than an hour away.
-export function missedRunNeedsRestart(discovery, restartedAt, now = Date.now()) {
+// `handledMissedRunAt` is the missed run a restart was already requested for;
+// it lives in its own state field because the fix counters reset whenever an
+// issue disappears.
+export function missedRunNeedsRestart(discovery, handledMissedRunAt, now = Date.now()) {
   if (discovery?.state !== "stale" || !discovery.missedRunAt) return false;
-  const missedAt = Date.parse(discovery.missedRunAt);
   const nextAt = Date.parse(discovery.nextRunAt ?? "");
   const outsideHours = Number.isFinite(nextAt) && nextAt - now > 61 * 60_000;
-  const restartedSince = Number.isFinite(restartedAt) && Number.isFinite(missedAt) && restartedAt > missedAt;
-  return !(outsideHours && restartedSince);
+  return !(outsideHours && handledMissedRunAt === discovery.missedRunAt);
 }
 
 export async function check(state = readState()) {
@@ -217,7 +218,7 @@ export async function check(state = readState()) {
   found.discovery = await discoveryStatus();
   if (!found.discoveryProcess) {
     issues.push({ code: "discovery.process", detail: "No Agency Discovery Claude process is running.", fix: "discovery-restart" });
-  } else if (missedRunNeedsRestart(found.discovery, state.fixes?.["discovery.missed"]?.lastAt)) {
+  } else if (missedRunNeedsRestart(found.discovery, state.handledMissedRunAt)) {
     issues.push({ code: "discovery.missed", detail: `Discovery missed its ${found.discovery.missedRunAt} run.`, fix: "discovery-restart" });
   }
   const discoveryState = readJson(resolve(discoveryDir, "discovery-state.json"), null);
@@ -344,6 +345,7 @@ async function autoOnce() {
     }
     const outcome = await applyFix(issue.fix, state);
     log(`FIX ${issue.code} (${issue.detail}) -> ${outcome}`);
+    if (issue.code === "discovery.missed") state.handledMissedRunAt = report.discovery?.missedRunAt ?? null;
     state.fixes[issue.code] = { attempts: record.attempts + 1, lastAt: now, lastOutcome: outcome };
   }
   // Issues that disappeared are resolved: reset their counters.
