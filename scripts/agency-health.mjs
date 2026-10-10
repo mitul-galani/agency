@@ -168,6 +168,20 @@ export function protectedPath(path) {
   return /\/(Documents|Desktop|Downloads)(\/|$)/.test(path);
 }
 
+// A missed run is only worth another coordinator restart while a catch-up
+// pass could still run. After the day's last scheduled run the coordinator
+// rightly declines to catch up (it is outside discovery hours), so repeating
+// the restart cannot clear the flag and would eventually page the owner for
+// nothing. Inside discovery hours the next run is never more than an hour away.
+export function missedRunNeedsRestart(discovery, restartedAt, now = Date.now()) {
+  if (discovery?.state !== "stale" || !discovery.missedRunAt) return false;
+  const missedAt = Date.parse(discovery.missedRunAt);
+  const nextAt = Date.parse(discovery.nextRunAt ?? "");
+  const outsideHours = Number.isFinite(nextAt) && nextAt - now > 61 * 60_000;
+  const restartedSince = Number.isFinite(restartedAt) && Number.isFinite(missedAt) && restartedAt > missedAt;
+  return !(outsideHours && restartedSince);
+}
+
 export async function check(state = readState()) {
   const issues = [];
   const found = { at: new Date().toISOString() };
@@ -203,7 +217,7 @@ export async function check(state = readState()) {
   found.discovery = await discoveryStatus();
   if (!found.discoveryProcess) {
     issues.push({ code: "discovery.process", detail: "No Agency Discovery Claude process is running.", fix: "discovery-restart" });
-  } else if (found.discovery?.state === "stale" && found.discovery.missedRunAt) {
+  } else if (missedRunNeedsRestart(found.discovery, state.fixes?.["discovery.missed"]?.lastAt)) {
     issues.push({ code: "discovery.missed", detail: `Discovery missed its ${found.discovery.missedRunAt} run.`, fix: "discovery-restart" });
   }
   const discoveryState = readJson(resolve(discoveryDir, "discovery-state.json"), null);
