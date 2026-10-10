@@ -172,15 +172,22 @@ export function protectedPath(path) {
 // pass could still run. After the day's last scheduled run the coordinator
 // rightly declines to catch up (it is outside discovery hours), so repeating
 // the restart cannot clear the flag and would eventually page the owner for
-// nothing. Inside discovery hours the next run is never more than an hour away.
-// `handledMissedRunAt` is the missed run a restart was already requested for;
-// it lives in its own state field because the fix counters reset whenever an
-// issue disappears.
+// nothing. `handledMissedRunAt` is the missed run a restart was already
+// requested for; it lives in its own state field because the fix counters
+// reset whenever an issue disappears.
+export function insideDiscoveryHours(schedule, now = Date.now()) {
+  if (!schedule?.timeZone) return true;
+  try {
+    const hour = Number(new Intl.DateTimeFormat("en-US", { hour: "numeric", hourCycle: "h23", timeZone: schedule.timeZone }).format(now));
+    return hour >= schedule.startHour && hour <= schedule.endHour;
+  } catch {
+    return true;
+  }
+}
+
 export function missedRunNeedsRestart(discovery, handledMissedRunAt, now = Date.now()) {
   if (discovery?.state !== "stale" || !discovery.missedRunAt) return false;
-  const nextAt = Date.parse(discovery.nextRunAt ?? "");
-  const outsideHours = Number.isFinite(nextAt) && nextAt - now > 61 * 60_000;
-  return !(outsideHours && handledMissedRunAt === discovery.missedRunAt);
+  return insideDiscoveryHours(discovery.schedule, now) || handledMissedRunAt !== discovery.missedRunAt;
 }
 
 export async function check(state = readState()) {
